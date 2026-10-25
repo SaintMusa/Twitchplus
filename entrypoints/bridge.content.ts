@@ -1,15 +1,28 @@
+import { REQUEST, RESULT, type FetchResult } from '@/lib/relay';
 import { MIRROR_KEY, STORE_KEY, parse, resolve } from '@/lib/settings';
 
 const RELOADED = 'twitchPlus.reloadedForSettings';
 
 // Extension side (isolated world): copies the popup's settings into twitch.tv's localStorage,
 // where the page-side script reads them synchronously at document start.
+// It also relays page-context fetches to the background worker (lib/relay.ts).
 export default defineContentScript({
   // Same pages as the page script: each twitch.tv host has its own localStorage, so each needs the copy.
   matches: ['https://*.twitch.tv/*'],
   allFrames: true,
   runAt: 'document_start',
   async main() {
+    // Registered before any await, so requests made while the page starts are not missed.
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || event.data?.type !== REQUEST) return;
+      const { id, request } = event.data;
+      const answer = (result: FetchResult) => window.postMessage({ type: RESULT, id, result }, location.origin);
+      browser.runtime.sendMessage({ type: REQUEST, request }).then(
+        (result: FetchResult | undefined) => answer(result ?? { status: 0, text: '', finalUrl: '', headers: '', error: 'network' }),
+        () => answer({ status: 0, text: '', finalUrl: '', headers: '', error: 'network' }),
+      );
+    });
+
     /** Writes the copy; true when the page started with different settings than these. */
     const mirror = (stored: unknown) => {
       const next = JSON.stringify(resolve(stored));

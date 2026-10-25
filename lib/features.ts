@@ -19,6 +19,8 @@ export interface Feature {
   ready: boolean;
   /** Also runs on other twitch.tv hosts (player.twitch.tv embeds) and in frames; others run on www, top frame only. */
   subdomains?: boolean;
+  /** Optional host permissions the popup asks for when the feature is switched on (manifest: optional_host_permissions). */
+  origins?: string[];
   options?: Option[];
 }
 
@@ -102,9 +104,10 @@ export const SECTIONS: Section[] = [
       {
         id: 'linkCards',
         label: 'Link preview cards',
-        description: "Twitch's own chat card for links. Links in chat are sent to Chatterino's link resolver.",
+        description: "Twitch's own chat card for links. Links in chat are sent to Chatterino's link resolver, and pages it can't read are fetched directly.",
         default: false,
-        ready: false,
+        ready: true,
+        origins: ['https://*/*'],
         options: [{ kind: 'toggle', id: 'history', label: 'Also for chat history on join', default: false }],
       },
       {

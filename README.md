@@ -11,7 +11,7 @@ Each feature can be turned on or off, by section, in the extension's popup.
 | Player | Screenshot button | Ready |
 | Chat | Chat and search hotkeys (`/` and `?`) | Ready |
 | Chat | Keep chat paused while hovering | Ready |
-| Chat | Link preview cards | Coming soon |
+| Chat | Link preview cards (asks for access to all sites when switched on) | Ready |
 | Chat | Chat logs on viewer cards | Coming soon |
 | Sidebar | Pins and folders | Ready |
 | Ads | Block ads (vaft, Support or Timer version) | Ready |

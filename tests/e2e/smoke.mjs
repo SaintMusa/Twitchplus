@@ -7,10 +7,12 @@
 //   npm run test:e2e -- --headed                         # watch it
 //   npm run test:e2e -- --no-inject                      # baseline: plain Twitch, to tell its own errors apart
 //   npm run test:e2e -- --screenshot=shot.png            # save what the page looks like at the end
+//   npm run test:e2e -- --fake-link=https://youtu.be/x   # feed chat a message with this link (for link cards)
 //
 // It needs network access to twitch.tv and runs signed out, in a throwaway profile.
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
+import { performFetch } from '../../lib/relay.ts';
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   const [k, ...v] = a.replace(/^--/, '').split('=');
@@ -41,6 +43,52 @@ await page.addInitScript(({ settings }) => {
 if (!args['no-inject']) await page.addInitScript({ content: `if (/(^|\\.)twitch\\.tv$/.test(location.hostname)) {
 ${payload}
 }` });
+
+// Stand-in for the bridge and background worker: answers the page's fetch requests (lib/relay.ts) with the
+// same performFetch the background worker runs, here in Node.
+await page.exposeFunction('__twitchPlusTestFetch', (request) => performFetch(request));
+await page.addInitScript(() => {
+  if (location.hostname !== 'www.twitch.tv' || window !== window.top) return;
+  window.addEventListener('message', async (event) => {
+    if (event.source !== window || event.data?.type !== 'twitchPlus.fetch') return;
+    const result = await window.__twitchPlusTestFetch(event.data.request);
+    window.postMessage({ type: 'twitchPlus.fetchResult', id: event.data.id, result }, location.origin);
+  });
+});
+
+if (args['fake-link']) {
+  // Wraps Twitch's chat WebSocket; after the first real chat line, dispatches one made-up line with the link,
+  // copying that line's room tags so Twitch shows it.
+  await page.addInitScript((link) => {
+    if (location.hostname !== 'www.twitch.tv' || window !== window.top) return;
+    const Native = window.WebSocket;
+    const debug = (window.__twitchPlusFakeLink = { sockets: [], sent: null });
+    window.WebSocket = class extends Native {
+      constructor(...a) {
+        super(...a);
+        debug.sockets.push(String(a[0]));
+        if (!String(a[0]).includes('irc-ws')) return;
+        let sent = false;
+        this.addEventListener('message', (event) => {
+          const line = String(event.data).split('\r\n').find((l) => l.includes(' PRIVMSG #'));
+          if (sent || !line || event.__fake) return;
+          sent = true;
+          const room = /room-id=(\d+)/.exec(line)?.[1] ?? '';
+          const channel = / PRIVMSG (#\S+) /.exec(line)[1];
+          const id = crypto.randomUUID();
+          // IRC lines end in CRLF; Twitch's parser splits on it.
+          const fake = `@badge-info=;badges=;color=#1E90FF;display-name=TwitchPlusTest;emotes=;first-msg=0;flags=;id=${id};mod=0;returning-chatter=0;room-id=${room};subscriber=0;tmi-sent-ts=${Date.now()};turbo=0;user-id=1;user-type= :twitchplustest!twitchplustest@twitchplustest.tmi.twitch.tv PRIVMSG ${channel} :link card test ${link}\r\n`;
+          setTimeout(() => {
+            const message = new MessageEvent('message', { data: fake });
+            message.__fake = true;
+            this.dispatchEvent(message);
+            debug.sent = { channel, room, at: Date.now() };
+          }, 2000);
+        });
+      }
+    };
+  }, args['fake-link']);
+}
 
 let channel = args.channel;
 if (!channel) {
@@ -81,6 +129,7 @@ const report = await page.evaluate(() => {
     screenshot: safe(() => window.__twitchNativeScreenshotReport?.()),
     pins: safe(() => window.__twitchNativePinsReport?.()),
     hoverPause: window.__twitchChatHoverPause?.state,
+    linkCards: window.__twitchChatLinkCards && { ...window.__twitchChatLinkCards, cardsShown: document.querySelectorAll('[data-link-card-shape]').length, testLine: [...document.querySelectorAll('.chat-line__message')].some((e) => e.textContent.includes('link card test')), fake: window.__twitchPlusFakeLink },
     adBlock: { vaftVersion: window.twitchAdSolutionsVersion, supportApi: typeof window.vaftSupport, workerHooked: !/\[native code\]/.test(String(window.Worker)) },
     videoPlaying: !!document.querySelector('video') && !document.querySelector('video').paused,
   };

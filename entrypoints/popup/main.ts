@@ -18,11 +18,19 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
   return node;
 }
 
-function switchInput(key: string, label: string, disabled = false) {
+function switchInput(key: string, label: string, disabled = false, origins?: string[]) {
   const input = el('input', { type: 'checkbox', className: 'switch', checked: settings[key] === true, disabled });
   input.setAttribute('role', 'switch');
   input.setAttribute('aria-label', label);
-  input.addEventListener('change', () => save(key, input.checked));
+  input.addEventListener('change', async () => {
+    // The browser only shows its permission prompt from a click, so ask before anything else is awaited.
+    if (input.checked && origins?.length && !(await browser.permissions.request({ origins }))) {
+      input.checked = false;
+      input.dispatchEvent(new Event('change'));
+      return;
+    }
+    await save(key, input.checked);
+  });
   return input;
 }
 
@@ -55,7 +63,7 @@ function optionRow(feature: Feature, option: Option) {
 function featureRow(feature: Feature) {
   const title = el('span', { className: 'feature-label' }, feature.label);
   if (!feature.ready) title.append(el('span', { className: 'badge' }, 'Coming soon'));
-  const toggle = switchInput(feature.id, feature.label, !feature.ready);
+  const toggle = switchInput(feature.id, feature.label, !feature.ready, feature.origins);
   const row = el(
     'div',
     { className: 'feature' + (feature.ready ? '' : ' not-ready') },

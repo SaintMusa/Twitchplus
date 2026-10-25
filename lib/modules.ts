@@ -3,6 +3,7 @@ import adBlock from './modules/ad-block';
 import chatHotkeys from './modules/chat-hotkeys';
 import hoverPause from './modules/hover-pause';
 import latency from './modules/latency';
+import linkCards from './modules/link-cards';
 import pins from './modules/pins';
 import preferredQuality from './modules/preferred-quality';
 import rewind from './modules/rewind';
@@ -20,6 +21,7 @@ export const MODULES: Record<string, Module> = {
   screenshot,
   chatHotkeys,
   hoverPause,
+  linkCards,
   pins,
   adBlock,
 };

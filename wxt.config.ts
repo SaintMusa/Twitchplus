@@ -13,6 +13,8 @@ export default defineConfig({
     permissions: ['storage'],
     // Lets the popup find open Twitch tabs to reload after a settings change.
     host_permissions: ['https://*.twitch.tv/*'],
+    // Asked for only when Link cards is switched on: it fetches link previews from any site (lib/relay.ts).
+    optional_host_permissions: ['https://*/*'],
     // Firefox 128 is the first with page-context ("MAIN" world) content scripts.
     ...(browser === 'firefox' && {
       browser_specific_settings: { gecko: { id: 'twitch-plus@local', strict_min_version: '128.0' } },
