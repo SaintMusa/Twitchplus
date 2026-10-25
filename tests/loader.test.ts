@@ -18,6 +18,14 @@ describe('startFeatures', () => {
     expect(chatHotkeys).not.toHaveBeenCalled();
   });
 
+  it('starts only subdomain features outside the main page', () => {
+    const chatHotkeys = vi.fn();
+    const adBlock = vi.fn();
+    expect(startFeatures(defaults(), { chatHotkeys, adBlock }, 'other')).toEqual({ adBlock: 'on' });
+    expect(chatHotkeys).not.toHaveBeenCalled();
+    expect(adBlock).toHaveBeenCalledWith({ version: 'support' });
+  });
+
   it('keeps going when one feature throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const latency = vi.fn();

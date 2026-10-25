@@ -14,7 +14,7 @@ Each feature can be turned on or off, by section, in the extension's popup.
 | Chat | Link preview cards | Coming soon |
 | Chat | Chat logs on viewer cards | Coming soon |
 | Sidebar | Pins and folders | Ready |
-| Ads | Block ads | Coming soon |
+| Ads | Block ads (vaft, Support or Timer version) | Ready |
 
 ## Install from source
 

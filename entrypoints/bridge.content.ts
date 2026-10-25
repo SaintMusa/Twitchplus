@@ -5,7 +5,9 @@ const RELOADED = 'twitchPlus.reloadedForSettings';
 // Extension side (isolated world): copies the popup's settings into twitch.tv's localStorage,
 // where the page-side script reads them synchronously at document start.
 export default defineContentScript({
-  matches: ['https://www.twitch.tv/*'],
+  // Same pages as the page script: each twitch.tv host has its own localStorage, so each needs the copy.
+  matches: ['https://*.twitch.tv/*'],
+  allFrames: true,
   runAt: 'document_start',
   async main() {
     /** Writes the copy; true when the page started with different settings than these. */

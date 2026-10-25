@@ -33,12 +33,12 @@ page.on('console', (m) => {
 
 // Same order as the extension: settings copy first (the bridge's job), then the page script.
 await page.addInitScript(({ settings }) => {
-  if (location.hostname !== 'www.twitch.tv') return;
+  if (!/(^|\.)twitch\.tv$/.test(location.hostname)) return;
   localStorage.setItem('twitchPlus.settings', JSON.stringify(settings));
   localStorage.setItem('twitchNativeRewind.debug', '1');
 }, { settings });
-// Like the manifest (www.twitch.tv only, top frame only); init scripts otherwise run in every frame.
-if (!args['no-inject']) await page.addInitScript({ content: `if (window === window.top && location.hostname === 'www.twitch.tv') {
+// Like the manifest: every twitch.tv host and frame (the loader keeps most features to www's top frame).
+if (!args['no-inject']) await page.addInitScript({ content: `if (/(^|\\.)twitch\\.tv$/.test(location.hostname)) {
 ${payload}
 }` });
 
@@ -81,6 +81,7 @@ const report = await page.evaluate(() => {
     screenshot: safe(() => window.__twitchNativeScreenshotReport?.()),
     pins: safe(() => window.__twitchNativePinsReport?.()),
     hoverPause: window.__twitchChatHoverPause?.state,
+    adBlock: { vaftVersion: window.twitchAdSolutionsVersion, supportApi: typeof window.vaftSupport, workerHooked: !/\[native code\]/.test(String(window.Worker)) },
     videoPlaying: !!document.querySelector('video') && !document.querySelector('video').paused,
   };
 });

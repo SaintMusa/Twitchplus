@@ -17,6 +17,8 @@ export interface Feature {
   default: boolean;
   /** False while the feature is still a userscript waiting to be ported; the popup shows it greyed out. */
   ready: boolean;
+  /** Also runs on other twitch.tv hosts (player.twitch.tv embeds) and in frames; others run on www, top frame only. */
+  subdomains?: boolean;
   options?: Option[];
 }
 
@@ -136,11 +138,21 @@ export const SECTIONS: Section[] = [
         label: 'Block ads',
         description: 'Based on vaft from pixeltris/TwitchAdSolutions (MIT).',
         default: true,
-        ready: false,
+        ready: true,
+        subdomains: true,
         options: [
-          { kind: 'toggle', id: 'clientAds', label: 'Also hide squeezeback and lower-third ads', default: true },
-          { kind: 'toggle', id: 'alarm', label: 'Show AD in the tab title during breaks', default: true },
-          { kind: 'list', id: 'supported', label: 'Channels to support (ads shown)', default: [], placeholder: 'channel name' },
+          {
+            kind: 'select',
+            id: 'version',
+            label: 'Version',
+            default: 'support',
+            choices: [
+              // Support: per-channel switch in the player's Settings menu, AD alarm in the tab title, stream kept big.
+              { value: 'support', label: 'Support' },
+              // Timer: also hides client-side ads, fewer requests, ad countdown in the banner.
+              { value: 'timer', label: 'Timer' },
+            ],
+          },
         ],
       },
     ],

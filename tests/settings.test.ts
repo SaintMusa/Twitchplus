@@ -8,14 +8,15 @@ describe('settings', () => {
     const d = defaults();
     expect(d.chatHotkeys).toBe(true);
     expect(d['chatHotkeys.searchKey']).toBe(true);
-    expect(d['adBlock.supported']).toEqual([]);
+    expect(d['adBlock.version']).toBe('support');
   });
 
   it('keeps stored values of the right type and drops the rest', () => {
-    const s = resolve({ chatHotkeys: false, 'quality.ceiling': 720, unknown: true, 'adBlock.supported': ['a', 1] });
+    const s = resolve({ chatHotkeys: false, 'quality.ceiling': 720, unknown: true, 'adBlock.version': 'timer', adBlock: 'yes' });
     expect(s.chatHotkeys).toBe(false);
     expect(s['quality.ceiling']).toBe('1080');
-    expect(s['adBlock.supported']).toEqual([]);
+    expect(s['adBlock.version']).toBe('timer');
+    expect(s.adBlock).toBe(true);
     expect('unknown' in s).toBe(false);
   });
 

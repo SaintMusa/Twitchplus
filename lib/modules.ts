@@ -1,4 +1,5 @@
 import type { Value } from './features';
+import adBlock from './modules/ad-block';
 import chatHotkeys from './modules/chat-hotkeys';
 import hoverPause from './modules/hover-pause';
 import latency from './modules/latency';
@@ -20,4 +21,5 @@ export const MODULES: Record<string, Module> = {
   chatHotkeys,
   hoverPause,
   pins,
+  adBlock,
 };
