@@ -1,0 +1,12 @@
+node_modules/
+.output/
+.wxt/
+web-ext.config.ts
+*.log
+
+# Never commit saved Twitch pages, captures or backups: they can hold session tokens and account data.
+*.html
+!entrypoints/**/*.html
+*_files/
+*.bak
+research/
