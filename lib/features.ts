@@ -113,9 +113,9 @@ export const SECTIONS: Section[] = [
       {
         id: 'viewerLogs',
         label: 'Chat logs on viewer cards',
-        description: "A viewer's earlier messages on their card, from logs.zonian.dev.",
+        description: "A viewer's earlier messages on their card, from logs.zonian.dev, plus live lines over Twitch chat.",
         default: false,
-        ready: false,
+        ready: true,
       },
     ],
   },

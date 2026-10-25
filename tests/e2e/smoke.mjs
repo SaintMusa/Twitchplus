@@ -8,6 +8,8 @@
 //   npm run test:e2e -- --no-inject                      # baseline: plain Twitch, to tell its own errors apart
 //   npm run test:e2e -- --screenshot=shot.png            # save what the page looks like at the end
 //   npm run test:e2e -- --fake-link=https://youtu.be/x   # feed chat a message with this link (for link cards)
+//   npm run test:e2e -- --open-viewer-card               # click the first name in chat (for chat logs)
+//   npm run test:e2e -- --no-inject --userscript=x.user.js  # run an original @grant none userscript instead, to compare
 //
 // It needs network access to twitch.tv and runs signed out, in a throwaway profile.
 import { readFile } from 'node:fs/promises';
@@ -43,6 +45,16 @@ await page.addInitScript(({ settings }) => {
 if (!args['no-inject']) await page.addInitScript({ content: `if (/(^|\\.)twitch\\.tv$/.test(location.hostname)) {
 ${payload}
 }` });
+
+if (args.userscript) {
+  // An original userscript, for side-by-side comparison: at document-start, or at DOMContentLoaded for document-end.
+  const source = await readFile(args.userscript, 'utf8');
+  const atEnd = /@run-at\s+document-end/.test(source);
+  await page.addInitScript({ content: `if (location.hostname === 'www.twitch.tv' && window === window.top) {
+    const run = () => { ${source} };
+    if (${atEnd} && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true }); else run();
+  }` });
+}
 
 // Stand-in for the bridge and background worker: answers the page's fetch requests (lib/relay.ts) with the
 // same performFetch the background worker runs, here in Node.
@@ -115,6 +127,12 @@ if (videoBox) {
   }
 }
 
+if (args['open-viewer-card']) {
+  const name = page.locator('[data-a-target="chat-message-username"]').first();
+  await name.click({ timeout: 10_000 }).catch((e) => problems.push(`test: could not open a viewer card: ${e.message}`));
+  await page.waitForTimeout(8000);
+}
+
 const report = await page.evaluate(() => {
   const safe = (f) => { try { return f(); } catch (e) { return `error: ${e.message}`; } };
   const q = window.__twitchPreferredQualityReport?.();
@@ -130,6 +148,12 @@ const report = await page.evaluate(() => {
     pins: safe(() => window.__twitchNativePinsReport?.()),
     hoverPause: window.__twitchChatHoverPause?.state,
     linkCards: window.__twitchChatLinkCards && { ...window.__twitchChatLinkCards, cardsShown: document.querySelectorAll('[data-link-card-shape]').length, testLine: [...document.querySelectorAll('.chat-line__message')].some((e) => e.textContent.includes('link card test')), fake: window.__twitchPlusFakeLink },
+    viewerLogs: {
+      viewerCard: !!document.querySelector('[data-a-target="viewer-card"], .viewer-card'),
+      toolbar: document.querySelectorAll('.chatlogs-toolbar').length,
+      messages: document.querySelectorAll('.chatlogs-message').length,
+      loading: document.querySelectorAll('.chatlogs-loading').length,
+    },
     adBlock: { vaftVersion: window.twitchAdSolutionsVersion, supportApi: typeof window.vaftSupport, workerHooked: !/\[native code\]/.test(String(window.Worker)) },
     videoPlaying: !!document.querySelector('video') && !document.querySelector('video').paused,
   };
