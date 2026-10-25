@@ -14,7 +14,7 @@ describe('settings', () => {
   it('keeps stored values of the right type and drops the rest', () => {
     const s = resolve({ chatHotkeys: false, 'quality.ceiling': 720, unknown: true, 'adBlock.supported': ['a', 1] });
     expect(s.chatHotkeys).toBe(false);
-    expect(s['quality.ceiling']).toBe('source');
+    expect(s['quality.ceiling']).toBe('1080');
     expect(s['adBlock.supported']).toEqual([]);
     expect('unknown' in s).toBe(false);
   });

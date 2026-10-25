@@ -6,11 +6,11 @@ Each feature can be turned on or off, by section, in the extension's popup.
 | Section | Feature | Status |
 |---|---|---|
 | Player | Live rewind seek bar | Coming soon |
-| Player | Preferred quality | Coming soon |
+| Player | Preferred quality | Ready |
 | Player | Live delay on the LIVE badge | Coming soon |
 | Player | Screenshot button | Coming soon |
 | Chat | Chat and search hotkeys (`/` and `?`) | Ready |
-| Chat | Keep chat paused while hovering | Coming soon |
+| Chat | Keep chat paused while hovering | Ready |
 | Chat | Link preview cards | Coming soon |
 | Chat | Chat logs on viewer cards | Coming soon |
 | Sidebar | Pins and folders | Coming soon |

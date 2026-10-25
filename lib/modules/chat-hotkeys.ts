@@ -28,7 +28,16 @@ interface Target {
   focus(el: HTMLElement): void;
 }
 
+declare global {
+  interface Window {
+    // Same global as the userscript, so a still-installed userscript sees it and stays out.
+    __twitchChatFocusHotkey?: { version: string };
+  }
+}
+
 const chatHotkeys: Module = (options) => {
+  if (window.__twitchChatFocusHotkey) return;
+  window.__twitchChatFocusHotkey = { version: 'twitch-plus' };
   // Matched on e.key, so ? works on layouts where it is not Shift+/.
   const targets: Record<string, Target> = {};
   if (options.chatKey !== false) {

@@ -43,13 +43,13 @@ export const SECTIONS: Section[] = [
         label: 'Preferred quality',
         description: 'Keeps Auto quality, but starts high and never goes above your ceiling.',
         default: true,
-        ready: false,
+        ready: true,
         options: [
           {
             kind: 'select',
             id: 'ceiling',
             label: 'Highest quality',
-            default: 'source',
+            default: '1080',
             choices: [
               { value: 'source', label: 'Source' },
               { value: '1080', label: '1080p' },
@@ -95,7 +95,7 @@ export const SECTIONS: Section[] = [
         label: 'Keep chat paused while hovering',
         description: 'Chat stays paused as long as the mouse is over it, not just 5 seconds.',
         default: true,
-        ready: false,
+        ready: true,
       },
       {
         id: 'linkCards',
