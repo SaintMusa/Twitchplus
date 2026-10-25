@@ -1,6 +1,9 @@
 import { defineConfig } from 'wxt';
 
 export default defineConfig({
+  // Every icon size is generated from this one file; replace it to change the logo.
+  modules: ['@wxt-dev/auto-icons'],
+  autoIcons: { baseIconPath: 'assets/icon.svg' },
   manifest: ({ browser }) => ({
     name: 'Twitch Plus',
     description: "Extra features for Twitch that look and behave like Twitch's own, each one switchable.",

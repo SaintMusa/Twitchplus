@@ -1,0 +1,10 @@
+<!-- Extension icon: the single source for every size (see wxt.config.ts). Replace this file to change the logo. -->
+<!-- Glitch shapes copied from Twitch's top-nav logo (40x40 grid); the plus badge sits on its bottom-right. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="6 4 36 36">
+  <polygon fill="#9146FF" points="13 8 8 13 8 31 14 31 14 36 19 31 23 31 32 22 32 8" />
+  <polygon fill="#FFFFFF" points="26 25 30 21 30 10 14 10 14 25 18 25 18 29 22 25" />
+  <path fill="#9146FF" d="M20,14 L22,14 L22,20 L20,20 Z M27,14 L27,20 L25,20 L25,14 Z" />
+  <circle cx="33" cy="31" r="8.5" fill="#FFFFFF" />
+  <circle cx="33" cy="31" r="6.75" fill="#9146FF" />
+  <path fill="#FFFFFF" d="M31.75,26.75 h2.5 v3 h3 v2.5 h-3 v3 h-2.5 v-3 h-3 v-2.5 h3 Z" />
+</svg>
