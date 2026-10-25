@@ -5,15 +5,15 @@ Each feature can be turned on or off, by section, in the extension's popup.
 
 | Section | Feature | Status |
 |---|---|---|
-| Player | Live rewind seek bar | Coming soon |
+| Player | Live rewind seek bar | Ready |
 | Player | Preferred quality | Ready |
-| Player | Live delay on the LIVE badge | Coming soon |
-| Player | Screenshot button | Coming soon |
+| Player | Live delay on the LIVE badge | Ready |
+| Player | Screenshot button | Ready |
 | Chat | Chat and search hotkeys (`/` and `?`) | Ready |
 | Chat | Keep chat paused while hovering | Ready |
 | Chat | Link preview cards | Coming soon |
 | Chat | Chat logs on viewer cards | Coming soon |
-| Sidebar | Pins and folders | Coming soon |
+| Sidebar | Pins and folders | Ready |
 | Ads | Block ads | Coming soon |
 
 ## Install from source
@@ -48,7 +48,12 @@ npm run build:firefox    # Firefox 128+: load .output/firefox-mv3/manifest.json 
 ```bash
 npm run compile   # type-check
 npm test          # unit tests
+npm run build && npm run test:e2e   # live smoke test on twitch.tv in your installed Chrome
 ```
+
+`test:e2e` opens a live channel signed out, with the built page script injected before Twitch's own scripts as the
+extension does, and prints each feature's status. `--channel=name`, `--settings='{"quality.ceiling":"720"}'`,
+`--headed`, `--screenshot=file.png` and `--no-inject` (plain Twitch, to tell its own errors apart) are options.
 
 ## Privacy
 
