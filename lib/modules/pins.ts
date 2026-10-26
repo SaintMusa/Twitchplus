@@ -224,6 +224,48 @@ const pins: Module = () => whenRoot(() => {
       return { pinned, groups: groups.filter(group => group.kind === 'folder' || group.streams.length || group.offline.length), rest };
     }
 
+    // Offline channels sort by when they last went live: one batched anonymous query (the start time, not the end).
+    // Render only reads the cache; unknown ids sort last, in Twitch's order.
+    const LAST_LIVE_TTL = 30 * 60 * 1000;
+    const LAST_LIVE_RETRY = 60 * 1000;
+    const lastLive = new Map();
+    let lastLiveRequest = null;
+
+    function byLastLive(list) {
+      const time = item => lastLive.get(item?.user?.id)?.time ?? -1;
+      return [...list].sort((a, b) => time(b) - time(a));
+    }
+
+    function wantLastLive(list) {
+      if (lastLiveRequest) return;
+      const fresh = Date.now() - LAST_LIVE_TTL;
+      const ids = list.map(item => item?.user?.id).filter(id => id && !(lastLive.get(id)?.at > fresh)).slice(0, 100);
+      if (!ids.length) return;
+      lastLiveRequest = fetchLastLive(ids).finally(() => { lastLiveRequest = null; });
+    }
+
+    async function fetchLastLive(ids) {
+      let users = null;
+      try {
+        const response = await fetch('https://gql.twitch.tv/gql', {
+          method: 'POST', credentials: 'omit',
+          headers: { 'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko', 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify({ variables: { ids }, query: 'query($ids: [ID!]) { users(ids: $ids) { id lastBroadcast { startedAt } } }' }),
+        });
+        const json = response.ok ? await response.json() : null;
+        if (!json?.errors?.length && Array.isArray(json?.data?.users)) users = json.data.users;
+      } catch {}
+      const now = Date.now();
+      // A failed lookup is retried after a minute, not on every render.
+      const failedAt = now - LAST_LIVE_TTL + LAST_LIVE_RETRY;
+      for (const id of ids) lastLive.set(id, { ...lastLive.get(id), at: users ? now : failedAt });
+      for (const user of users || []) {
+        const time = Date.parse(user?.lastBroadcast?.startedAt);
+        if (user?.id && Number.isFinite(time)) lastLive.set(user.id, { at: now, time });
+      }
+      if (users) rerender();
+    }
+
     // Twitch's row renderers, wrapped to draw only pinned channels. One wrapper per renderer keeps React's
     // component identity stable, so rows are not remounted on every render.
     const pinnedOnly = new WeakMap();
@@ -279,7 +321,8 @@ const pins: Module = () => whenRoot(() => {
           }, {
             streams: [...pinned.streams, ...live.filter(item => !pinned.streams.includes(item))],
           })];
-          rest.offline = [...pinned.offline, ...rest.offline];
+          wantLastLive(rest.offline);
+          rest.offline = [...pinned.offline, ...byLastLive(rest.offline)];
           const drawnGroups = [...groups];
           const sort = { ...this.props.sort, type: NO_SORT };
           if (!groups.length) {
