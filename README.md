@@ -3,18 +3,18 @@
 A browser extension (Chrome and Firefox) that adds features to Twitch which look and behave like Twitch's own.
 Each feature can be turned on or off, by section, in the extension's popup.
 
-| Section | Feature | Status |
-|---|---|---|
-| Player | Live rewind seek bar | Ready |
-| Player | Preferred quality | Ready |
-| Player | Live delay on the LIVE badge | Ready |
-| Player | Screenshot button | Ready |
-| Chat | Chat and search hotkeys (`/` and `?`) | Ready |
-| Chat | Keep chat paused while hovering | Ready |
-| Chat | Link preview cards (asks for access to all sites when switched on) | Ready |
-| Chat | Chat logs on viewer cards | Ready |
-| Sidebar | Pins and folders | Ready |
-| Ads | Block ads (vaft, Support or Timer version) | Ready |
+| Section | Feature |
+|---|---|
+| Player | Live rewind seek bar |
+| Player | Preferred quality |
+| Player | Live delay on the LIVE badge |
+| Player | Screenshot button |
+| Chat | Chat and search hotkeys (`/` and `?`) |
+| Chat | Keep chat paused while hovering |
+| Chat | Link preview cards (asks for access to all sites when switched on) |
+| Chat | Chat logs on viewer cards |
+| Sidebar | Pins and folders; offline channels sorted by when they last went live |
+| Ads | Block ads (vaft, Support or Timer version) |
 
 ## Install from source
 
@@ -62,5 +62,6 @@ off by default.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The ad-blocking feature will include vaft from
-[pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT); its notice will ship with it.
+MIT, see [LICENSE](LICENSE). The ad-blocking feature is based on vaft from
+[pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT); its licence notice is kept in
+`lib/modules/vaft-*.ts`.

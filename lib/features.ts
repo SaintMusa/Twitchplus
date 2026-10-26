@@ -1,6 +1,6 @@
 // Every switchable feature, grouped into the sections the popup shows.
 // The popup, the defaults and the page-side loader are all built from this list, so a new
-// feature only needs an entry here and a module in lib/modules.ts.
+// feature only needs an entry here and a module in lib/modules/, registered in lib/modules.ts.
 
 export type Value = boolean | string | string[];
 

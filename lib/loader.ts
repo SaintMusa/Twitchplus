@@ -18,7 +18,6 @@ export function startFeatures(settings: Settings, modules: Record<string, Module
       status[feature.id] = 'off';
       continue;
     }
-    // One broken feature must never take Twitch or the other features down with it.
     try {
       start(optionsOf(settings, feature.id));
       status[feature.id] = 'on';
