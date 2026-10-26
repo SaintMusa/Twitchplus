@@ -78,20 +78,6 @@ section .feature:last-child { border-bottom: 0; }
   font-size: 12px;
 }
 
-.badge {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 9px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-  vertical-align: 1px;
-}
-
-.not-ready .feature-head, .not-ready .option { cursor: default; }
-.not-ready .feature-label > :first-child, .not-ready .desc { opacity: 0.75; }
-
 .options {
   margin: 8px 0 0 2px;
   padding-left: 12px;
@@ -102,9 +88,7 @@ section .feature:last-child { border-bottom: 0; }
 
 .options.off { opacity: 0.45; pointer-events: none; }
 
-.option-list { flex-direction: column; align-items: stretch; gap: 4px; }
-
-select, textarea {
+select {
   font: inherit;
   color: var(--text);
   background: var(--surface);
@@ -112,8 +96,6 @@ select, textarea {
   border-radius: 4px;
   padding: 3px 6px;
 }
-
-textarea { resize: vertical; width: 100%; }
 
 .switch {
   appearance: none;

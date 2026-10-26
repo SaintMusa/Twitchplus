@@ -1,14 +1,12 @@
 import type { Module } from '../modules';
 
-// Ported from twitch-preferred-quality-native.user.js 2.2.0.
+// Nudges Twitch's player to start at a preferred quality while leaving Auto in charge.
 // Auto remains in charge of throughput, buffering and device constraints.
 // This is a startup hint, not a sustained minimum-quality guarantee.
-// The userscript also matched each module against a saved copy of its source; the fingerprints below
-// already accept that exact source, so only they are kept.
 
 declare global {
   interface Window {
-    // Same globals as the userscript, so a still-installed userscript sees them and stays out.
+    // Guard against starting twice.
     __twitchPreferredQuality?: Record<string, any>;
     __twitchPreferredQualityReport?: () => unknown;
     webpackChunktwitch_twilight?: unknown;
@@ -28,8 +26,7 @@ const CEILINGS: Record<string, { height: number; bitrate: number }> = {
 };
 const PREFERRED_FPS = 60;
 
-// The two modules are found by content: Twitch renumbers its modules between builds (87045 and 987032
-// in the userscript's day, 532984 and 719906 on 2026-10-25), so fixed IDs stop matching.
+// The two modules are found by content: IDs change between builds, so fixed IDs stop matching.
 type Role = 'settings' | 'creator';
 const FINGERPRINTS: Record<Role, { markers: string[]; exportPattern: RegExp }> = {
   // Player settings store; exports `o` either as a getter (`o:()=>a`) or, in newer builds, as a value (`{o:{get:…}}`).
@@ -56,7 +53,7 @@ const preferredQuality: Module = (options) => {
   const { height: PREFERRED_HEIGHT, bitrate: INITIAL_BITRATE } = CEILINGS[String(options.ceiling)] ?? CEILINGS['1080']!;
   if (window.__twitchPreferredQuality) return;
   const status: Record<string, any> = (window.__twitchPreferredQuality = {
-    version: 'twitch-plus', state: 'starting',
+    state: 'starting',
     preference: PREFERRED_HEIGHT === Infinity ? 'source' : `${PREFERRED_HEIGHT}p${PREFERRED_FPS}`,
     matched: [], executed: [], selected: null, decisions: 0, manual: false,
     players: 0, startupHints: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE,

@@ -1,16 +1,13 @@
 // @ts-nocheck
-// Verbatim port of the latency feature of Twitch Native UI 1.3.0 (was Twitch Native Latency 1.2.1), lines 1442-1666 of the userscript.
-// Kept unchanged so fixes can be compared line by line with the userscript; adding types is a later refactor.
-// Its own duplicate guard and storage keys are unchanged, so a still-installed userscript and this never both run.
+// Adds a stream latency badge and a button to jump to the live edge.
 import type { Module } from '../modules';
 import { listen, whenRoot } from '../page-observer';
 
-// Native UI started its features only once <html> existed (its startAll); whenRoot keeps that.
+// Starts once <html> exists.
 const latency: Module = () => whenRoot(() => {
     if (typeof window.__twitchNativeLatencyReport === 'function') return;
-    const VERSION = '1.2.1';
     const PLAYER = '[data-a-target="video-player"], .video-player';
-    // Top-bar badge normally; with the DVR seekbar (Twitch Native Rewind) Twitch moves it beside the seekbar.
+    // Top-bar badge normally; with the DVR seekbar Twitch moves it beside the seekbar.
     const BADGE = '.video-player__overlay .tw-channel-status-text-indicator';
     const BUTTON = '[data-a-target="musa-player-latency-button"]';
     const TOOLTIP = 'Stream delay. Click to refresh player.';
@@ -20,7 +17,7 @@ const latency: Module = () => whenRoot(() => {
     let refreshing = false;
 
     window.__twitchNativeLatencyReport = () => ({
-      version: VERSION, mountedButtons: [...mounts.values()].filter(ui => ui.host.isConnected).length,
+      mountedButtons: [...mounts.values()].filter(ui => ui.host.isConnected).length,
       refreshing, refreshes: status.refreshes, lastLatency: status.lastLatency, lastError: status.lastError,
     });
 
@@ -79,7 +76,7 @@ const latency: Module = () => whenRoot(() => {
       return null;
     }
 
-    // Twitch keeps its media player on a React component above the video; same lookup Enhancer uses.
+    // Twitch keeps its media player on a React component above the video.
     function playerProps() {
       const hasPlayer = fiber => !!fiber?.stateNode?.props?.mediaPlayerInstance;
       const node = findChild(fiberOf(document.querySelector('.persistent-player')), hasPlayer) ||

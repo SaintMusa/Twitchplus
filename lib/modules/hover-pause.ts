@@ -1,6 +1,6 @@
 import type { Module } from '../modules';
 
-// Ported from twitch-chat-hover-pause.user.js 1.0.1.
+// Keeps chat from auto-resuming while the mouse hovers over it.
 // Native flow (chat scroller class component, minified name varies):
 //   onMouseEnter -> hoverPause -> setHoverResumeInterval: setInterval(onHoverResumeInterval, 1000)
 //   onHoverResumeInterval counts hoverResumeSecondsRemaining 5 -> 1, then resume()
@@ -10,8 +10,8 @@ import type { Module } from '../modules';
 
 declare global {
   interface Window {
-    // Same global as the userscript, so a still-installed userscript sees it and stays out.
-    __twitchChatHoverPause?: { version: string; state: string; patchedInstances: number; prototypePatched: boolean };
+    // Guard against starting twice.
+    __twitchChatHoverPause?: { state: string; patchedInstances: number; prototypePatched: boolean };
   }
 }
 
@@ -21,7 +21,7 @@ type Scroller = any;
 const hoverPause: Module = () => {
   if (window.__twitchChatHoverPause) return;
   const status: NonNullable<Window['__twitchChatHoverPause']> = (window.__twitchChatHoverPause = {
-    version: 'twitch-plus', state: 'starting', patchedInstances: 0, prototypePatched: false,
+    state: 'starting', patchedInstances: 0, prototypePatched: false,
   });
 
   const patched = new WeakSet<object>();

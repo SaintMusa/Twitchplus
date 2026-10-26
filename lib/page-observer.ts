@@ -1,4 +1,4 @@
-// One page observer shared by the Native UI features (pins, latency, screenshot), as in Twitch Native UI 1.3.0.
+// One page observer shared by pins, latency and screenshot.
 // Each batch of changes is sorted once into the areas the features care about; a feature is only called for
 // the areas it listens to.
 
@@ -58,7 +58,7 @@ export function listen(listener: Listener) {
 
 /**
  * Runs `start` once <html> exists: right away at a normal document start, later if the page script ran even
- * earlier (as Native UI's startAll did). A failure after waiting is logged, since the loader has moved on.
+ * earlier. A failure after waiting is logged, since the loader has moved on.
  */
 export function whenRoot(start: () => void) {
   if (document.documentElement) return start();

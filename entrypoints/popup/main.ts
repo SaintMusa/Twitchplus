@@ -18,8 +18,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string,
   return node;
 }
 
-function switchInput(key: string, label: string, disabled = false, origins?: string[]) {
-  const input = el('input', { type: 'checkbox', className: 'switch', checked: settings[key] === true, disabled });
+function switchInput(key: string, label: string, origins?: string[]) {
+  const input = el('input', { type: 'checkbox', className: 'switch', checked: settings[key] === true });
   input.setAttribute('role', 'switch');
   input.setAttribute('aria-label', label);
   input.addEventListener('change', async () => {
@@ -36,37 +36,22 @@ function switchInput(key: string, label: string, disabled = false, origins?: str
 
 function optionRow(feature: Feature, option: Option) {
   const key = optionKey(feature.id, option.id);
-  const disabled = !feature.ready;
   if (option.kind === 'toggle') {
-    return el('label', { className: 'option' }, el('span', {}, option.label), switchInput(key, option.label, disabled));
+    return el('label', { className: 'option' }, el('span', {}, option.label), switchInput(key, option.label));
   }
-  if (option.kind === 'select') {
-    const select = el('select', { disabled });
-    for (const c of option.choices) select.append(el('option', { value: c.value, textContent: c.label }));
-    select.value = String(settings[key]);
-    select.addEventListener('change', () => save(key, select.value));
-    return el('label', { className: 'option' }, el('span', {}, option.label), select);
-  }
-  // List: one entry per line, saved lowercased and trimmed (Twitch logins are lowercase).
-  const area = el('textarea', {
-    rows: 3,
-    disabled,
-    placeholder: `One ${option.placeholder} per line`,
-    value: (settings[key] as string[]).join('\n'),
-  });
-  area.addEventListener('change', () =>
-    save(key, area.value.split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean)),
-  );
-  return el('label', { className: 'option option-list' }, el('span', {}, option.label), area);
+  const select = el('select');
+  for (const c of option.choices) select.append(el('option', { value: c.value, textContent: c.label }));
+  select.value = String(settings[key]);
+  select.addEventListener('change', () => save(key, select.value));
+  return el('label', { className: 'option' }, el('span', {}, option.label), select);
 }
 
 function featureRow(feature: Feature) {
   const title = el('span', { className: 'feature-label' }, feature.label);
-  if (!feature.ready) title.append(el('span', { className: 'badge' }, 'Coming soon'));
-  const toggle = switchInput(feature.id, feature.label, !feature.ready, feature.origins);
+  const toggle = switchInput(feature.id, feature.label, feature.origins);
   const row = el(
     'div',
-    { className: 'feature' + (feature.ready ? '' : ' not-ready') },
+    { className: 'feature' },
     el('label', { className: 'feature-head' }, el('span', {}, title, el('p', { className: 'desc' }, feature.description)), toggle),
   );
   if (feature.options?.length) {

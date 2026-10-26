@@ -9,7 +9,6 @@
 //   npm run test:e2e -- --screenshot=shot.png            # save what the page looks like at the end
 //   npm run test:e2e -- --fake-link=https://youtu.be/x   # feed chat a message with this link (for link cards)
 //   npm run test:e2e -- --open-viewer-card               # click the first name in chat (for chat logs)
-//   npm run test:e2e -- --no-inject --userscript=x.user.js  # run an original @grant none userscript instead, to compare
 //
 // It needs network access to twitch.tv and runs signed out, in a throwaway profile.
 import { readFile } from 'node:fs/promises';
@@ -45,16 +44,6 @@ await page.addInitScript(({ settings }) => {
 if (!args['no-inject']) await page.addInitScript({ content: `if (/(^|\\.)twitch\\.tv$/.test(location.hostname)) {
 ${payload}
 }` });
-
-if (args.userscript) {
-  // An original userscript, for side-by-side comparison: at document-start, or at DOMContentLoaded for document-end.
-  const source = await readFile(args.userscript, 'utf8');
-  const atEnd = /@run-at\s+document-end/.test(source);
-  await page.addInitScript({ content: `if (location.hostname === 'www.twitch.tv' && window === window.top) {
-    const run = () => { ${source} };
-    if (${atEnd} && document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true }); else run();
-  }` });
-}
 
 // Stand-in for the bridge and background worker: answers the page's fetch requests (lib/relay.ts) with the
 // same performFetch the background worker runs, here in Node.

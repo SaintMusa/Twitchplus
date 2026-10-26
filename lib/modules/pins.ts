@@ -1,14 +1,11 @@
 // @ts-nocheck
-// Verbatim port of the pins feature of Twitch Native UI 1.3.0 (was Twitch Native Pins 2.5.1), lines 691-1438 of the userscript.
-// Kept unchanged so fixes can be compared line by line with the userscript; adding types is a later refactor.
-// Its own duplicate guard and storage keys are unchanged, so a still-installed userscript and this never both run.
+// Pins channels and groups followed channels into folders and categories in the sidebar.
 import type { Module } from '../modules';
 import { listen, whenRoot } from '../page-observer';
 
-// Native UI started its features only once <html> existed (its startAll); whenRoot keeps that.
+// Starts once <html> exists.
 const pins: Module = () => whenRoot(() => {
     if (typeof window.__twitchNativePinsReport === 'function') return;
-    const VERSION = '2.5.1';
     const STORE = 'twitchNativePins.channels';
     const FOLDERS = 'twitchNativePins.folders';
     const OPTIONS = 'twitchNativePins.options';
@@ -38,7 +35,7 @@ const pins: Module = () => whenRoot(() => {
     let reveal = null;
 
     window.__twitchNativePinsReport = () => ({
-      version: VERSION, pinned: pins.length, folders: folders.map(folder => `${folder.name} (${folder.members.length})`),
+      pinned: pins.length, folders: folders.map(folder => `${folder.name} (${folder.members.length})`),
       byCategory: options.byCategory, hookedSections: sections().filter(({ node }) => hooked.has(node)).length,
     });
 
@@ -551,7 +548,6 @@ const pins: Module = () => whenRoot(() => {
     // Put the collapse arrow and folder menu into a group's native header. The category switch lives in
     // Twitch's Sort By menu instead (decorateSortMenu).
     function decorateHeader(element, group) {
-      if (group.kind === 'followed') return;
       // Followed-style headers are one big sort button, so the tools go beside it in the outer wrapper.
       const header = element.querySelector('.followed-side-nav-header--expanded') ||
         element.querySelector('.side-nav-header[data-a-target="side-nav-header-expanded"]');
@@ -678,7 +674,7 @@ const pins: Module = () => whenRoot(() => {
     }
 
     // One-time copy of the Enhancer extension's pins, read from the ★ it draws on pinned avatars.
-    // Its saved list lives in extension storage that a userscript cannot read directly.
+    // Its saved list lives in extension storage that page scripts cannot read directly.
     function importEnhancerPins(element) {
       try { if (localStorage.getItem(IMPORTED)) return false; } catch { return false; }
       const theirs = [...element.querySelectorAll('.pin-streamer-button')];

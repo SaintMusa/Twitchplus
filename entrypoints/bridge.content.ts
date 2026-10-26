@@ -2,6 +2,7 @@ import { REQUEST, RESULT, type FetchResult } from '@/lib/relay';
 import { MIRROR_KEY, STORE_KEY, parse, resolve } from '@/lib/settings';
 
 const RELOADED = 'twitchPlus.reloadedForSettings';
+const NETWORK_ERROR: FetchResult = { status: 0, text: '', finalUrl: '', headers: '', error: 'network' };
 
 // Extension side (isolated world): copies the popup's settings into twitch.tv's localStorage,
 // where the page-side script reads them synchronously at document start.
@@ -18,8 +19,8 @@ export default defineContentScript({
       const { id, request } = event.data;
       const answer = (result: FetchResult) => window.postMessage({ type: RESULT, id, result }, location.origin);
       browser.runtime.sendMessage({ type: REQUEST, request }).then(
-        (result: FetchResult | undefined) => answer(result ?? { status: 0, text: '', finalUrl: '', headers: '', error: 'network' }),
-        () => answer({ status: 0, text: '', finalUrl: '', headers: '', error: 'network' }),
+        (result: FetchResult | undefined) => answer(result ?? NETWORK_ERROR),
+        () => answer(NETWORK_ERROR),
       );
     });
 

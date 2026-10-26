@@ -21,8 +21,7 @@ export function defaults(): Settings {
   return out;
 }
 
-const sameType = (a: Value, b: unknown) =>
-  Array.isArray(a) ? Array.isArray(b) && b.every((x) => typeof x === 'string') : typeof a === typeof b;
+const sameType = (a: Value, b: unknown) => typeof a === typeof b;
 
 /** Defaults overlaid with whatever stored values are known and of the right type. */
 export function resolve(stored: unknown): Settings {

@@ -2,12 +2,11 @@
 // The popup, the defaults and the page-side loader are all built from this list, so a new
 // feature only needs an entry here and a module in lib/modules/, registered in lib/modules.ts.
 
-export type Value = boolean | string | string[];
+export type Value = boolean | string;
 
 export type Option =
   | { kind: 'toggle'; id: string; label: string; default: boolean }
-  | { kind: 'select'; id: string; label: string; default: string; choices: { value: string; label: string }[] }
-  | { kind: 'list'; id: string; label: string; default: string[]; placeholder: string };
+  | { kind: 'select'; id: string; label: string; default: string; choices: { value: string; label: string }[] };
 
 export interface Feature {
   /** Unique across all sections; also the storage key of the feature's own on/off value. */
@@ -15,8 +14,6 @@ export interface Feature {
   label: string;
   description: string;
   default: boolean;
-  /** False while the feature is still a userscript waiting to be ported; the popup shows it greyed out. */
-  ready: boolean;
   /** Also runs on other twitch.tv hosts (player.twitch.tv embeds) and in frames; others run on www, top frame only. */
   subdomains?: boolean;
   /** Optional host permissions the popup asks for when the feature is switched on (manifest: optional_host_permissions). */
@@ -40,14 +37,12 @@ export const SECTIONS: Section[] = [
         label: 'Live rewind seek bar',
         description: "Twitch's own seek bar on live streams, so you can scrub back.",
         default: true,
-        ready: true,
       },
       {
         id: 'quality',
         label: 'Preferred quality',
         description: 'Keeps Auto quality, but starts high and never goes above your ceiling.',
         default: true,
-        ready: true,
         options: [
           {
             kind: 'select',
@@ -68,14 +63,12 @@ export const SECTIONS: Section[] = [
         label: 'Live delay on the LIVE badge',
         description: 'Shows the stream delay next to LIVE. Click it to jump back to the live edge.',
         default: true,
-        ready: true,
       },
       {
         id: 'screenshot',
         label: 'Screenshot button',
         description: 'Saves the current frame as a PNG at the playback resolution.',
         default: true,
-        ready: true,
       },
     ],
   },
@@ -88,7 +81,6 @@ export const SECTIONS: Section[] = [
         label: 'Chat and search hotkeys',
         description: 'Escape leaves the box again, so player keys work.',
         default: true,
-        ready: true,
         options: [
           { kind: 'toggle', id: 'chatKey', label: '/ jumps into chat', default: true },
           { kind: 'toggle', id: 'searchKey', label: '? jumps into search', default: true },
@@ -99,14 +91,12 @@ export const SECTIONS: Section[] = [
         label: 'Keep chat paused while hovering',
         description: 'Chat stays paused as long as the mouse is over it, not just 5 seconds.',
         default: true,
-        ready: true,
       },
       {
         id: 'linkCards',
         label: 'Link preview cards',
         description: "Twitch's own chat card for links. Links in chat are sent to Chatterino's link resolver, and pages it can't read are fetched directly.",
         default: false,
-        ready: true,
         origins: ['https://*/*'],
         options: [{ kind: 'toggle', id: 'history', label: 'Also for chat history on join', default: false }],
       },
@@ -115,7 +105,6 @@ export const SECTIONS: Section[] = [
         label: 'Chat logs on viewer cards',
         description: "A viewer's earlier messages on their card, from logs.zonian.dev, plus live lines over Twitch chat.",
         default: false,
-        ready: true,
       },
     ],
   },
@@ -128,7 +117,6 @@ export const SECTIONS: Section[] = [
         label: 'Pins and folders',
         description: "Pin followed channels and sort them into folders. Group by category is in Twitch's own Sort By menu.",
         default: true,
-        ready: true,
       },
     ],
   },
@@ -141,7 +129,6 @@ export const SECTIONS: Section[] = [
         label: 'Block ads',
         description: 'Based on vaft from pixeltris/TwitchAdSolutions (MIT).',
         default: true,
-        ready: true,
         subdomains: true,
         options: [
           {

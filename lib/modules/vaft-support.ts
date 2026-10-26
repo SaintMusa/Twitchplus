@@ -22,17 +22,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-// Verbatim port of vaft-support.user.js (37.0.0-support.5), lines 13-1657 (the body of its IIFE).
-// It builds the video worker's code from its own functions' source text (toString), so the extension
-// is built unminified (wxt.config.ts). Its version guard (window.twitchAdSolutionsVersion) is unchanged,
-// so a still-installed vaft userscript and this never both run.
+// Builds the video worker's source from this file's function text (toString), hence the unminified build (wxt.config.ts).
 import type { Module } from '../modules';
 
 const vaftSupport: Module = () => {
     'use strict';
     const ourTwitchAdSolutionsVersion = 24;// Used to prevent conflicts with outdated versions of the scripts
     if (typeof window.twitchAdSolutionsVersion !== 'undefined' && window.twitchAdSolutionsVersion >= ourTwitchAdSolutionsVersion) {
-        console.log("skipping vaft as there's another script active. ourVersion:" + ourTwitchAdSolutionsVersion + " activeVersion:" + window.twitchAdSolutionsVersion);
         window.twitchAdSolutionsVersion = ourTwitchAdSolutionsVersion;
         return;
     }
@@ -44,7 +40,6 @@ const vaftSupport: Module = () => {
             'embed',//Source
             'popout',//Source
             'autoplay',//360p
-            //'picture-by-picture-CACHED'//360p (-CACHED is an internal suffix and is removed)
         ];
         scope.FallbackPlayerType = 'embed';
         scope.ForceAccessTokenPlayerType = 'popout';
@@ -61,7 +56,6 @@ const vaftSupport: Module = () => {
         scope.ClientSession = null;
         scope.ClientIntegrityHeader = null;
         scope.AuthorizationHeader = undefined;
-        scope.SimulatedAdsDepth = 0;
         scope.PlayerBufferingFix = true;// If true this will pause/play the player when it gets stuck buffering
         scope.PlayerBufferingDelay = 600;// How often should we check the player state (in milliseconds)
         scope.PlayerBufferingSameStateCount = 3;// How many times of seeing the same player state until we trigger pause/play (it will only trigger it one time until the player state changes again)
@@ -73,7 +67,6 @@ const vaftSupport: Module = () => {
         scope.V2API = false;
         scope.IsAdStrippingEnabled = true;
         scope.AdSegmentCache = new Map();
-        scope.AllSegmentsAreAdSegments = false;
         // Support: logins (lowercase) whose ads are let through so they play for real
         scope.SupportChannels = new Set();
         scope.SupportPlayerKind = 'player';
@@ -204,7 +197,6 @@ const vaftSupport: Module = () => {
             const workerString = proto.toString();
             if (workerStringReinsert.some((x) => workerString.includes(x))) {
                 result.push(proto);
-            } else {
             }
             proto = Object.getPrototypeOf(proto);
         }
@@ -269,8 +261,6 @@ const vaftSupport: Module = () => {
                             ClientVersion = e.data.value;
                         } else if (e.data.key == 'UpdateClientSession') {
                             ClientSession = e.data.value;
-                        } else if (e.data.key == 'UpdateClientId') {
-                            ClientID = e.data.value;
                         } else if (e.data.key == 'UpdateDeviceId') {
                             GQLDeviceID = e.data.value;
                         } else if (e.data.key == 'UpdateClientIntegrityHeader') {
@@ -296,12 +286,6 @@ const vaftSupport: Module = () => {
                             }
                         } else if (e.data.key == 'TriggeredPlayerReload') {
                             HasTriggeredPlayerReload = true;
-                        } else if (e.data.key == 'SimulateAds') {
-                            SimulatedAdsDepth = e.data.value;
-                            console.log('SimulatedAdsDepth: ' + SimulatedAdsDepth);
-                        } else if (e.data.key == 'AllSegmentsAreAdSegments') {
-                            AllSegmentsAreAdSegments = !AllSegmentsAreAdSegments;
-                            console.log('AllSegmentsAreAdSegments: ' + AllSegmentsAreAdSegments);
                         }
                     });
                     hookWorkerFetch();
@@ -357,7 +341,6 @@ const vaftSupport: Module = () => {
         return req.responseText;
     }
     function hookWorkerFetch() {
-        console.log('hookWorkerFetch (vaft)');
         const realFetch = fetch;
         fetch = async function(url, options) {
             if (typeof url === 'string') {
@@ -481,7 +464,6 @@ const vaftSupport: Module = () => {
                                                             const [streamWidthB, streamHeightB] = b.Resolution.split('x').map(Number);
                                                             return Math.abs((streamWidthA * streamHeightA) - (targetWidth * targetHeight)) - Math.abs((streamWidthB * streamHeightB) - (targetWidth * targetHeight));
                                                         })[0];
-                                                        console.log('ModifiedM3U8 swap ' + resSettings[codecsKey] + ' to ' + newResolutionInfo.Codecs + ' oldRes:' + oldResolution + ' newRes:' + newResolutionInfo.Resolution);
                                                         lines[i] = lines[i].replace(/CODECS="[^"]+"/, `CODECS="${newResolutionInfo.Codecs}"`);
                                                         lines[i + 1] = newResolutionInfo.Url + ' '.repeat(i + 1);// The stream doesn't load unless each url line is unique
                                                     }
@@ -537,7 +519,7 @@ const vaftSupport: Module = () => {
             line = line
                 .replaceAll(/(X-TV-TWITCH-AD-URL=")(?:[^"]*)(")/g, `$1${newAdUrl}$2`)
                 .replaceAll(/(X-TV-TWITCH-AD-CLICK-TRACKING-URL=")(?:[^"]*)(")/g, `$1${newAdUrl}$2`);
-            if (i < lines.length - 1 && line.startsWith('#EXTINF') && (!line.includes(',live') || stripAllSegments || AllSegmentsAreAdSegments)) {
+            if (i < lines.length - 1 && line.startsWith('#EXTINF') && (!line.includes(',live') || stripAllSegments)) {
                 const segmentUrl = lines[i + 1];
                 if (!AdSegmentCache.has(segmentUrl)) {
                     streamInfo.NumStrippedAdSegments++;
@@ -634,7 +616,7 @@ const vaftSupport: Module = () => {
             HasTriggeredPlayerReload = false;
             streamInfo.LastPlayerReload = Date.now();
         }
-        const haveAdTags = textStr.includes(AdSignifier) || SimulatedAdsDepth > 0;
+        const haveAdTags = textStr.includes(AdSignifier);
         if (haveAdTags) {
             streamInfo.IsMidroll = textStr.includes('"MIDROLL"') || textStr.includes('"midroll"');
             if (!streamInfo.IsShowingAd) {
@@ -653,7 +635,6 @@ const vaftSupport: Module = () => {
                     if (line.startsWith('#EXTINF') && lines.length > i + 1) {
                         if (!line.includes(',live') && !streamInfo.RequestedAds.has(lines[i + 1])) {
                             // Only request one .ts file per .m3u8 request to avoid making too many requests
-                            //console.log('Fetch ad .ts file');
                             streamInfo.RequestedAds.add(lines[i + 1]);
                             fetch(lines[i + 1]).then((response)=>{response.blob()});
                             break;
@@ -718,7 +699,7 @@ const vaftSupport: Module = () => {
                                     if (playerType == FallbackPlayerType) {
                                         fallbackM3u8 = m3u8Text;
                                     }
-                                    if ((!m3u8Text.includes(AdSignifier) && (SimulatedAdsDepth == 0 || playerTypeIndex >= SimulatedAdsDepth - 1)) || (!fallbackM3u8 && playerTypeIndex >= BackupPlayerTypes.length - 1)) {
+                                    if (!m3u8Text.includes(AdSignifier) || (!fallbackM3u8 && playerTypeIndex >= BackupPlayerTypes.length - 1)) {
                                         backupPlayerType = playerType;
                                         backupM3u8 = m3u8Text;
                                         break;
@@ -872,8 +853,9 @@ const vaftSupport: Module = () => {
                 const state = playerForMonitoringBuffering.state;
                 if (!player.core) {
                     playerForMonitoringBuffering = null;
+                } else if (state.props?.content?.type === 'live' &&
                     // Support: not on supported channels, where it would pause/play the real ads (Twitch logs that)
-                } else if (state.props?.content?.type === 'live' && !getSupportChannels().includes(currentChannel()) && !player.isPaused() && !player.getHTMLVideoElement()?.ended && playerBufferState.lastFixTime <= Date.now() - PlayerBufferingMinRepeatDelay && !isActivelyStrippingAds) {
+                    !getSupportChannels().includes(currentChannel()) && !player.isPaused() && !player.getHTMLVideoElement()?.ended && playerBufferState.lastFixTime <= Date.now() - PlayerBufferingMinRepeatDelay && !isActivelyStrippingAds) {
                     const m3u8Url = player.core?.state?.path;
                     if (m3u8Url) {
                       const fileName = new URL(m3u8Url).pathname.split('/').pop();
@@ -883,8 +865,7 @@ const vaftSupport: Module = () => {
                               playerBufferState.channelName = channelName;
                               playerBufferState.hasStreamStarted = false;
                               playerBufferState.numSame = 0;
-                              //console.log('Channel changed to ' + channelName);
-                          }
+                            }
                       }
                     }
                     if (player.getState() === 'Playing') {
@@ -894,7 +875,6 @@ const vaftSupport: Module = () => {
                     const bufferedPosition = player.core?.state?.bufferedPosition;
                     const bufferDuration = player.getBufferDuration();
                     if (position !== undefined && bufferedPosition !== undefined) {
-                        //console.log('position:' + position + ' bufferDuration:' + bufferDuration + ' bufferPosition:' + bufferedPosition + ' state: ' + player.core?.state?.state + ' started: ' + playerBufferState.hasStreamStarted);
                         // NOTE: This could be improved. It currently lets the player fully eat the full buffer before it triggers pause/play
                         if (playerBufferState.hasStreamStarted &&
                             (!PlayerBufferingPrerollCheckEnabled || position > PlayerBufferingPrerollCheckOffset) &&
@@ -956,8 +936,7 @@ const vaftSupport: Module = () => {
         const playerRootDiv = document.querySelector('.video-player');
         // Support: no "Blocking ads" banner on the stream box shown during a supported channel's ad break
         if (playerRootDiv != null && !InSupportStreamFrame) {
-            let adBlockDiv = null;
-            adBlockDiv = playerRootDiv.querySelector('.adblock-overlay');
+            let adBlockDiv = playerRootDiv.querySelector('.adblock-overlay');
             if (adBlockDiv == null) {
                 adBlockDiv = document.createElement('div');
                 adBlockDiv.className = 'adblock-overlay';
@@ -966,11 +945,9 @@ const vaftSupport: Module = () => {
                 adBlockDiv.P = adBlockDiv.querySelector('p');
                 playerRootDiv.appendChild(adBlockDiv);
             }
-            if (adBlockDiv != null) {
-                isActivelyStrippingAds = data.isStrippingAdSegments;
-                adBlockDiv.P.textContent = 'Blocking' + (data.isMidroll ? ' midroll' : '') + ' ads' + (data.isStrippingAdSegments ? ' (stripping)' : '');// + (data.numStrippedAdSegments > 0 ? ` (${data.numStrippedAdSegments})` : '');
-                adBlockDiv.style.display = data.hasAds && playerBufferState.isLive ? 'block' : 'none';
-            }
+            isActivelyStrippingAds = data.isStrippingAdSegments;
+            adBlockDiv.P.textContent = 'Blocking' + (data.isMidroll ? ' midroll' : '') + ' ads' + (data.isStrippingAdSegments ? ' (stripping)' : '');
+            adBlockDiv.style.display = data.hasAds && playerBufferState.isLive ? 'block' : 'none';
         }
     }
     function getPlayerAndState() {
@@ -1062,7 +1039,6 @@ const vaftSupport: Module = () => {
                     localStorage.setItem(lsKeyQuality, JSON.stringify({default:player.core.state.quality.group}));
                 }
             } catch {}
-            console.log('Reloading Twitch player');
             playerState.setSrc({ isNewMediaPlayerInstance: true, refreshAccessToken: true });
             postTwitchWorkerMessage('TriggeredPlayerReload');
             player.play();
@@ -1081,12 +1057,8 @@ const vaftSupport: Module = () => {
                     } catch {}
                 }, 3000);
             }
-            return;
         }
     }
-    window.reloadTwitchPlayer = () => {
-        doTwitchPlayerTask(false, true);
-    };
     function postTwitchWorkerMessage(key, value) {
         twitchWorkers.forEach((worker) => {
             worker.postMessage({key: key, value: value});
@@ -1186,7 +1158,6 @@ const vaftSupport: Module = () => {
                             }
                         }
                         if (replacedPlayerType) {
-                            console.log(`Replaced '${replacedPlayerType}' player type with '${ForceAccessTokenPlayerType}' player type`);
                             init.body = JSON.stringify(newBody);
                         }
                     }
@@ -1204,18 +1175,17 @@ const vaftSupport: Module = () => {
         let hidden = document.__lookupGetter__('hidden');
         let webkitHidden = document.__lookupGetter__('webkitHidden');
         const mozHidden = document.__lookupGetter__('mozHidden');
-        const isRealVisibility = () => isOnSupportedChannel();
         try {
             Object.defineProperty(document, 'visibilityState', {
                 get() {
-                    return isRealVisibility() && visibilityState ? visibilityState.apply(document) : 'visible';
+                    return isOnSupportedChannel() && visibilityState ? visibilityState.apply(document) : 'visible';
                 }
             });
         }catch{}
         try {
             Object.defineProperty(document, 'hidden', {
                 get() {
-                    return isRealVisibility() && hidden ? hidden.apply(document) : false;
+                    return isOnSupportedChannel() && hidden ? hidden.apply(document) : false;
                 }
             });
         }catch{}
@@ -1226,7 +1196,7 @@ const vaftSupport: Module = () => {
         };
         let wasVideoPlaying = true;
         const visibilityChange = e => {
-            if (isRealVisibility()) {
+            if (isOnSupportedChannel()) {
                 return;
             }
             const isChrome = typeof chrome !== 'undefined';
@@ -1236,7 +1206,6 @@ const vaftSupport: Module = () => {
                     wasVideoPlaying = !videos[0].paused && !videos[0].ended;
                 } else {
                     if (!playerBufferState.hasStreamStarted) {
-                        //console.log('Tab focused. Stream should be active');
                         playerBufferState.hasStreamStarted = true;
                     }
                     if (isChrome && wasVideoPlaying && !videos[0].ended && videos[0].paused && videos[0].muted) {
@@ -1254,13 +1223,13 @@ const vaftSupport: Module = () => {
             if (/Firefox/.test(navigator.userAgent)) {
                 Object.defineProperty(document, 'mozHidden', {
                     get() {
-                        return isRealVisibility() && mozHidden ? mozHidden.apply(document) : false;
+                        return isOnSupportedChannel() && mozHidden ? mozHidden.apply(document) : false;
                     }
                 });
             } else {
                 Object.defineProperty(document, 'webkitHidden', {
                     get() {
-                        return isRealVisibility() && webkitHidden ? webkitHidden.apply(document) : false;
+                        return isOnSupportedChannel() && webkitHidden ? webkitHidden.apply(document) : false;
                     }
                 });
             }
@@ -1315,16 +1284,6 @@ const vaftSupport: Module = () => {
             onContentLoaded();
         });
     }
-    window.simulateAds = (depth) => {
-        if (depth === undefined || depth < 0) {
-            console.log('Ad depth paramter required (0 = no simulated ad, 1+ = use backup player for given depth)');
-            return;
-        }
-        postTwitchWorkerMessage('SimulateAds', depth);
-    };
-    window.allSegmentsAreAdSegments = () => {
-        postTwitchWorkerMessage('AllSegmentsAreAdSegments');
-    };
     // Support: a switch in the player's Settings menu lets the current channel's ads through
     function currentChannel() {
         const parts = location.pathname.split('/').filter(Boolean);
@@ -1425,11 +1384,10 @@ const vaftSupport: Module = () => {
             input.id = rowConfig.target + '-toggle';
             input.removeAttribute('aria-labelledby');
             input.setAttribute('aria-label', rowConfig.label);
-            const row = item;
-            row.setAttribute('data-a-target', rowConfig.target);
-            row.title = rowConfig.title;
-            row.addEventListener('click', toggleSupportFromMenu);
-            row.addEventListener('keydown', e => {
+            item.setAttribute('data-a-target', rowConfig.target);
+            item.title = rowConfig.title;
+            item.addEventListener('click', toggleSupportFromMenu);
+            item.addEventListener('keydown', e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                     toggleSupportFromMenu(e);
                 }
@@ -1499,7 +1457,6 @@ const vaftSupport: Module = () => {
     } else {
         document.addEventListener('DOMContentLoaded', () => supportObserver.observe(document.documentElement, { childList: true, subtree: true }), { once: true });
     }
-    // Support: once a second on a supported channel, note changes in the ad label and Twitch's mini player
     // Support: "AD ▶" in the tab title while an ad break is on, on any channel. It starts when Twitch asks for the
     // mini player's token and ends when that player's ads end (supported channels) or after AdAlarmMaxMs
     const AdAlarmPrefix = 'AD ▶ ';
@@ -1538,6 +1495,7 @@ const vaftSupport: Module = () => {
     }
     setInterval(updateAdAlarmTitle, 1000);
     let supportLastState = '';
+    // Support: once a second on a supported channel, note changes in the ad label and Twitch's mini player
     setInterval(() => {
         const login = currentChannel();
         if (!login || !getSupportChannels().includes(login)) {

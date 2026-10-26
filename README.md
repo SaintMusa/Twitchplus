@@ -39,9 +39,9 @@ npm run build:firefox    # Firefox 128+: load .output/firefox-mv3/manifest.json 
 
 ### Adding a feature
 
-1. Add it to `lib/features.ts` with `ready: false` while you work on it.
+1. Add it to `lib/features.ts`.
 2. Write `lib/modules/<name>.ts`, which exports a function that takes the feature's options.
-3. Register it in `lib/modules.ts` and set `ready: true`. `npm test` checks that the two match.
+3. Register it in `lib/modules.ts`. `npm test` checks that every feature has a module.
 
 ## Checks
 

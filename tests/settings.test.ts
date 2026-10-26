@@ -36,7 +36,7 @@ describe('features', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('has a module exactly for the ready features', () => {
-    for (const f of FEATURES) expect(f.id in MODULES, f.id).toBe(f.ready);
+  it('has a module for every feature', () => {
+    for (const f of FEATURES) expect(f.id in MODULES, f.id).toBe(true);
   });
 });

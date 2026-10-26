@@ -1,14 +1,11 @@
 // @ts-nocheck
-// Verbatim port of the screenshot feature of Twitch Native UI 1.3.0 (was Twitch Native Screenshot 1.0.0), lines 1670-1910 of the userscript.
-// Kept unchanged so fixes can be compared line by line with the userscript; adding types is a later refactor.
-// Its own duplicate guard and storage keys are unchanged, so a still-installed userscript and this never both run.
+// Adds a button that saves a screenshot of the current video frame.
 import type { Module } from '../modules';
 import { listen, whenRoot } from '../page-observer';
 
-// Native UI started its features only once <html> existed (its startAll); whenRoot keeps that.
+// Starts once <html> exists.
 const screenshot: Module = () => whenRoot(() => {
     if (typeof window.__twitchNativeScreenshotReport === 'function') return;
-    const VERSION = '1.0.0';
     const PLAYER = '[data-a-target="video-player"], .video-player';
     const GROUP = '.player-controls__right-control-group';
     const REFERENCE = '[data-a-target="player-settings-button"], [data-a-target="player-fullscreen-button"]';
@@ -21,7 +18,7 @@ const screenshot: Module = () => whenRoot(() => {
     let busy = false;
 
     window.__twitchNativeScreenshotReport = () => ({
-      version: VERSION, mountedButtons: [...mounts.values()].filter(ui => ui.host.isConnected).length,
+      mountedButtons: [...mounts.values()].filter(ui => ui.host.isConnected).length,
       busy, captures: status.captures, downloadsRequested: status.downloadsRequested,
       lastFrame: status.lastFrame ? { ...status.lastFrame } : null, lastError: status.lastError,
     });

@@ -1,6 +1,6 @@
 import type { Module } from '../modules';
 
-// Ported from twitch-chat-focus-hotkey.user.js 1.1.0.
+// Focuses the chat box (or search) with a hotkey.
 // The chat box is a Slate editor: <div role="textbox" contenteditable data-a-target="chat-input">.
 // Same selector in the channel page, popout chat and mod view. The search box is the top-nav
 // <input type="search" autocomplete="twitch-nav-search"> (aria-label is translated, this is not).
@@ -30,14 +30,14 @@ interface Target {
 
 declare global {
   interface Window {
-    // Same global as the userscript, so a still-installed userscript sees it and stays out.
-    __twitchChatFocusHotkey?: { version: string };
+    // Guard against starting twice.
+    __twitchChatFocusHotkey?: Record<string, never>;
   }
 }
 
 const chatHotkeys: Module = (options) => {
   if (window.__twitchChatFocusHotkey) return;
-  window.__twitchChatFocusHotkey = { version: 'twitch-plus' };
+  window.__twitchChatFocusHotkey = {};
   // Matched on e.key, so ? works on layouts where it is not Shift+/.
   const targets: Record<string, Target> = {};
   if (options.chatKey !== false) {

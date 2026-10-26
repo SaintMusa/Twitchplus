@@ -22,7 +22,9 @@ export default defineContentScript({
     let json: string | null = null;
     try {
       json = localStorage.getItem(MIRROR_KEY);
-    } catch {}
+    } catch {
+      // Storage can be blocked; run with the defaults.
+    }
     const settings = parse(json);
     // Inspect from the console: __twitchPlus.status
     const place = location.hostname === 'www.twitch.tv' && window === window.top ? 'main' : 'other';

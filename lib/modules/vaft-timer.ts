@@ -22,17 +22,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-// Verbatim port of vaft.user.js (37.0.0-timer.3), lines 13-1478 (the body of its IIFE).
-// It builds the video worker's code from its own functions' source text (toString), so the extension
-// is built unminified (wxt.config.ts). Its version guard (window.twitchAdSolutionsVersion) is unchanged,
-// so a still-installed vaft userscript and this never both run.
+// Builds the video worker's source from this file's function text (toString), hence the unminified build (wxt.config.ts).
 import type { Module } from '../modules';
 
 const vaftTimer: Module = () => {
     'use strict';
     const ourTwitchAdSolutionsVersion = 24;// Used to prevent conflicts with outdated versions of the scripts
     if (typeof window.twitchAdSolutionsVersion !== 'undefined' && window.twitchAdSolutionsVersion >= ourTwitchAdSolutionsVersion) {
-        console.log("skipping vaft as there's another script active. ourVersion:" + ourTwitchAdSolutionsVersion + " activeVersion:" + window.twitchAdSolutionsVersion);
         window.twitchAdSolutionsVersion = ourTwitchAdSolutionsVersion;
         return;
     }
@@ -44,7 +40,6 @@ const vaftTimer: Module = () => {
             'embed',//Source
             'popout',//Source
             'autoplay',//360p
-            //'picture-by-picture-CACHED'//360p (-CACHED is an internal suffix and is removed)
         ];
         scope.FallbackPlayerType = 'embed';
         scope.ForceAccessTokenPlayerType = 'popout';
@@ -61,7 +56,6 @@ const vaftTimer: Module = () => {
         scope.ClientSession = null;
         scope.ClientIntegrityHeader = null;
         scope.AuthorizationHeader = undefined;
-        scope.SimulatedAdsDepth = 0;
         scope.PlayerBufferingFix = true;// If true this will pause/play the player when it gets stuck buffering
         scope.PlayerBufferingDelay = 600;// How often should we check the player state (in milliseconds)
         scope.PlayerBufferingIdleDelay = 3000;// How often to look for a player while there isn't one (in milliseconds)
@@ -74,7 +68,6 @@ const vaftTimer: Module = () => {
         scope.V2API = false;
         scope.IsAdStrippingEnabled = true;
         scope.AdSegmentCache = new Map();
-        scope.AllSegmentsAreAdSegments = false;
         scope.ForceSuppressClientAds = true;// Sets SUPPRESS="true" in the master playlist, the flag Twitch's page checks before running client-side ads
         scope.BackupPlayerTypeCooldown = 10000;// After a backup player type serves ads, skip it for this long (in milliseconds) instead of re-requesting it every playlist refresh
         scope.AccessTokenCache = new Map();// channel + player type -> { token, expires }
@@ -122,7 +115,6 @@ const vaftTimer: Module = () => {
             const workerString = proto.toString();
             if (workerStringReinsert.some((x) => workerString.includes(x))) {
                 result.push(proto);
-            } else {
             }
             proto = Object.getPrototypeOf(proto);
         }
@@ -186,8 +178,6 @@ const vaftTimer: Module = () => {
                             ClientVersion = e.data.value;
                         } else if (e.data.key == 'UpdateClientSession') {
                             ClientSession = e.data.value;
-                        } else if (e.data.key == 'UpdateClientId') {
-                            ClientID = e.data.value;
                         } else if (e.data.key == 'UpdateDeviceId') {
                             GQLDeviceID = e.data.value;
                         } else if (e.data.key == 'UpdateClientIntegrityHeader') {
@@ -213,12 +203,6 @@ const vaftTimer: Module = () => {
                             }
                         } else if (e.data.key == 'TriggeredPlayerReload') {
                             HasTriggeredPlayerReload = true;
-                        } else if (e.data.key == 'SimulateAds') {
-                            SimulatedAdsDepth = e.data.value;
-                            console.log('SimulatedAdsDepth: ' + SimulatedAdsDepth);
-                        } else if (e.data.key == 'AllSegmentsAreAdSegments') {
-                            AllSegmentsAreAdSegments = !AllSegmentsAreAdSegments;
-                            console.log('AllSegmentsAreAdSegments: ' + AllSegmentsAreAdSegments);
                         }
                     });
                     hookWorkerFetch();
@@ -281,7 +265,6 @@ const vaftTimer: Module = () => {
         return req.responseText;
     }
     function hookWorkerFetch() {
-        console.log('hookWorkerFetch (vaft)');
         const realFetch = fetch;
         fetch = async function(url, options) {
             if (typeof url === 'string') {
@@ -407,7 +390,6 @@ const vaftTimer: Module = () => {
                                                             const [streamWidthB, streamHeightB] = b.Resolution.split('x').map(Number);
                                                             return Math.abs((streamWidthA * streamHeightA) - (targetWidth * targetHeight)) - Math.abs((streamWidthB * streamHeightB) - (targetWidth * targetHeight));
                                                         })[0];
-                                                        console.log('ModifiedM3U8 swap ' + resSettings[codecsKey] + ' to ' + newResolutionInfo.Codecs + ' oldRes:' + oldResolution + ' newRes:' + newResolutionInfo.Resolution);
                                                         lines[i] = lines[i].replace(/CODECS="[^"]+"/, `CODECS="${newResolutionInfo.Codecs}"`);
                                                         lines[i + 1] = newResolutionInfo.Url + ' '.repeat(i + 1);// The stream doesn't load unless each url line is unique
                                                     }
@@ -481,7 +463,7 @@ const vaftTimer: Module = () => {
                     .replaceAll(/(X-TV-TWITCH-AD-URL=")(?:[^"]*)(")/g, `$1${newAdUrl}$2`)
                     .replaceAll(/(X-TV-TWITCH-AD-CLICK-TRACKING-URL=")(?:[^"]*)(")/g, `$1${newAdUrl}$2`);
             }
-            if (i < lines.length - 1 && line.startsWith('#EXTINF') && (!line.includes(',live') || stripAllSegments || AllSegmentsAreAdSegments)) {
+            if (i < lines.length - 1 && line.startsWith('#EXTINF') && (!line.includes(',live') || stripAllSegments)) {
                 const segmentUrl = lines[i + 1];
                 if (!AdSegmentCache.has(segmentUrl)) {
                     streamInfo.NumStrippedAdSegments++;
@@ -708,7 +690,7 @@ const vaftTimer: Module = () => {
             streamInfo.LastPlayerReload = Date.now();
         }
         textStr = stripMafAds(textStr, streamInfo);
-        const haveAdTags = textStr.includes(AdSignifier) || SimulatedAdsDepth > 0;
+        const haveAdTags = textStr.includes(AdSignifier);
         if (haveAdTags) {
             streamInfo.IsMidroll = textStr.includes('"MIDROLL"') || textStr.includes('"midroll"');
             // Keep the last known info when a playlist has no ad tags of its own (e.g. between two ads of a pod)
@@ -730,7 +712,6 @@ const vaftTimer: Module = () => {
                     if (line.startsWith('#EXTINF') && lines.length > i + 1) {
                         if (!line.includes(',live') && !streamInfo.RequestedAds.has(lines[i + 1])) {
                             // Only request one .ts file per .m3u8 request to avoid making too many requests
-                            //console.log('Fetch ad .ts file');
                             streamInfo.RequestedAds.add(lines[i + 1]);
                             fetch(lines[i + 1]).then((response) => response.blob())['catch'](() => {});
                             break;
@@ -804,7 +785,7 @@ const vaftTimer: Module = () => {
                                         fallbackM3u8 = m3u8Text;
                                     }
                                     servedAds = m3u8Text.includes(AdSignifier);
-                                    if ((!servedAds && (SimulatedAdsDepth == 0 || playerTypeIndex >= SimulatedAdsDepth - 1)) || (!fallbackM3u8 && isLastPlayerType)) {
+                                    if (!servedAds || (!fallbackM3u8 && isLastPlayerType)) {
                                         backupPlayerType = playerType;
                                         backupM3u8 = m3u8Text;
                                         break;
@@ -998,7 +979,6 @@ const vaftTimer: Module = () => {
                               playerBufferState.channelName = channelName;
                               playerBufferState.hasStreamStarted = false;
                               playerBufferState.numSame = 0;
-                              //console.log('Channel changed to ' + channelName);
                           }
                       }
                     }
@@ -1009,7 +989,6 @@ const vaftTimer: Module = () => {
                     const bufferedPosition = player.core?.state?.bufferedPosition;
                     const bufferDuration = player.getBufferDuration();
                     if (position !== undefined && bufferedPosition !== undefined) {
-                        //console.log('position:' + position + ' bufferDuration:' + bufferDuration + ' bufferPosition:' + bufferedPosition + ' state: ' + player.core?.state?.state + ' started: ' + playerBufferState.hasStreamStarted);
                         // NOTE: This could be improved. It currently lets the player fully eat the full buffer before it triggers pause/play
                         if (playerBufferState.hasStreamStarted &&
                             (!PlayerBufferingPrerollCheckEnabled || position > PlayerBufferingPrerollCheckOffset) &&
@@ -1072,8 +1051,7 @@ const vaftTimer: Module = () => {
         isActivelyStrippingAds = !!data.isStrippingAdSegments;
         const playerRootDiv = document.querySelector('.video-player');
         if (playerRootDiv != null) {
-            let adBlockDiv = null;
-            adBlockDiv = playerRootDiv.querySelector('.adblock-overlay');
+            let adBlockDiv = playerRootDiv.querySelector('.adblock-overlay');
             if (adBlockDiv == null) {
                 adBlockDiv = document.createElement('div');
                 adBlockDiv.className = 'adblock-overlay';
@@ -1082,41 +1060,39 @@ const vaftTimer: Module = () => {
                 adBlockDiv.P = adBlockDiv.querySelector('p');
                 playerRootDiv.appendChild(adBlockDiv);
             }
-            if (adBlockDiv != null) {
-                const isVisible = data.hasAds && playerBufferState.isLive;
-                const formatTimeLeft = function(endTime) {
-                    const secondsLeft = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-                    return ` · ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
-                };
-                const getText = function() {
-                    const adPodInfo = data.adPodInfo;
-                    const mafAdInfo = data.mafAdInfo;
-                    if (mafAdInfo) {
-                        return 'Blocking ' + (mafAdInfo.formatName ? mafAdInfo.formatName + ' ad' : 'ads') + formatTimeLeft(mafAdInfo.endTime);
-                    }
-                    let adText = '';
-                    if (adPodInfo) {
-                        adText = (adPodInfo.podLength > 1 ? ` · Ad ${adPodInfo.podPosition} of ${adPodInfo.podLength}` : '') + formatTimeLeft(adPodInfo.endTime);
-                    }
-                    return 'Blocking' + (data.isMidroll ? ' midroll' : '') + ' ads' + adText + (data.isStrippingAdSegments ? ' (stripping)' : '');// + (data.numStrippedAdSegments > 0 ? ` (${data.numStrippedAdSegments})` : '');
-                };
-                const renderText = function() {
-                    if (!adBlockDiv.isConnected) {
-                        // The player was replaced: stop ticking for the old banner
-                        clearInterval(adBlockDiv.CountdownTimer);
-                        adBlockDiv.CountdownTimer = null;
-                        return;
-                    }
-                    const text = getText();
-                    if (adBlockDiv.P.textContent !== text) {
-                        adBlockDiv.P.textContent = text;
-                    }
-                };
-                renderText();
-                clearInterval(adBlockDiv.CountdownTimer);
-                adBlockDiv.CountdownTimer = isVisible && (data.adPodInfo || data.mafAdInfo) ? setInterval(renderText, 1000) : null;
-                adBlockDiv.style.display = isVisible ? 'block' : 'none';
-            }
+            const isVisible = data.hasAds && playerBufferState.isLive;
+            const formatTimeLeft = function(endTime) {
+                const secondsLeft = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+                return ` · ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
+            };
+            const getText = function() {
+                const adPodInfo = data.adPodInfo;
+                const mafAdInfo = data.mafAdInfo;
+                if (mafAdInfo) {
+                    return 'Blocking ' + (mafAdInfo.formatName ? mafAdInfo.formatName + ' ad' : 'ads') + formatTimeLeft(mafAdInfo.endTime);
+                }
+                let adText = '';
+                if (adPodInfo) {
+                    adText = (adPodInfo.podLength > 1 ? ` · Ad ${adPodInfo.podPosition} of ${adPodInfo.podLength}` : '') + formatTimeLeft(adPodInfo.endTime);
+                }
+                return 'Blocking' + (data.isMidroll ? ' midroll' : '') + ' ads' + adText + (data.isStrippingAdSegments ? ' (stripping)' : '');
+            };
+            const renderText = function() {
+                if (!adBlockDiv.isConnected) {
+                    // The player was replaced: stop ticking for the old banner
+                    clearInterval(adBlockDiv.CountdownTimer);
+                    adBlockDiv.CountdownTimer = null;
+                    return;
+                }
+                const text = getText();
+                if (adBlockDiv.P.textContent !== text) {
+                    adBlockDiv.P.textContent = text;
+                }
+            };
+            renderText();
+            clearInterval(adBlockDiv.CountdownTimer);
+            adBlockDiv.CountdownTimer = isVisible && (data.adPodInfo || data.mafAdInfo) ? setInterval(renderText, 1000) : null;
+            adBlockDiv.style.display = isVisible ? 'block' : 'none';
         }
     }
     function getPlayerAndState() {
@@ -1208,7 +1184,6 @@ const vaftTimer: Module = () => {
                     localStorage.setItem(lsKeyQuality, JSON.stringify({default:player.core.state.quality.group}));
                 }
             } catch {}
-            console.log('Reloading Twitch player');
             playerState.setSrc({ isNewMediaPlayerInstance: true, refreshAccessToken: true });
             // The reload makes a new media player instance; let the buffering monitor find it again
             playerForMonitoringBuffering = null;
@@ -1229,12 +1204,8 @@ const vaftTimer: Module = () => {
                     } catch {}
                 }, 3000);
             }
-            return;
         }
     }
-    window.reloadTwitchPlayer = () => {
-        doTwitchPlayerTask(false, true);
-    };
     function postTwitchWorkerMessage(key, value) {
         twitchWorkers.forEach((worker) => {
             worker.postMessage({key: key, value: value});
@@ -1364,7 +1335,6 @@ const vaftTimer: Module = () => {
                             }
                         }
                         if (replacedPlayerType) {
-                            console.log(`Replaced '${replacedPlayerType}' player type with '${ForceAccessTokenPlayerType}' player type`);
                             init.body = JSON.stringify(newBody);
                         }
                     }
@@ -1406,7 +1376,6 @@ const vaftTimer: Module = () => {
                     wasVideoPlaying = !videos[0].paused && !videos[0].ended;
                 } else {
                     if (!playerBufferState.hasStreamStarted) {
-                        //console.log('Tab focused. Stream should be active');
                         playerBufferState.hasStreamStarted = true;
                     }
                     if (isChrome && wasVideoPlaying && !videos[0].ended && videos[0].paused && videos[0].muted) {
@@ -1485,16 +1454,6 @@ const vaftTimer: Module = () => {
             onContentLoaded();
         });
     }
-    window.simulateAds = (depth) => {
-        if (depth === undefined || depth < 0) {
-            console.log('Ad depth paramter required (0 = no simulated ad, 1+ = use backup player for given depth)');
-            return;
-        }
-        postTwitchWorkerMessage('SimulateAds', depth);
-    };
-    window.allSegmentsAreAdSegments = () => {
-        postTwitchWorkerMessage('AllSegmentsAreAdSegments');
-    };
 };
 
 export default vaftTimer;

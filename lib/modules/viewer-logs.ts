@@ -1,7 +1,5 @@
 // @ts-nocheck
-// Verbatim port of Twitch Viewer Card Chat Logs 5.8.11, lines 14-3231 (the body of its IIFE).
-// The userscript ran at document-end, so the copied code waits for DOMContentLoaded. It has no duplicate guard of
-// its own; the one below covers the extension only, so turn the userscript off when this feature is on.
+// Adds a chat history panel (archived and live messages) to Twitch viewer cards.
 // Network: logs.zonian.dev (archived lines), anonymous Twitch IRC (live lines), emote APIs (7TV, BTTV, FFZ),
 // api.ivr.fi, and api.twitch.tv, which gets the viewer's own Twitch token for chat badges.
 import type { Module } from '../modules';
@@ -17,8 +15,6 @@ const viewerLogs: Module = () => {
   window.__twitchPlusViewerLogs = true;
   const run = () => {
     try {
-    'use strict';
-
     const ZONIAN_BASE_URL = 'https://logs.zonian.dev';
     const MSG_SOURCE_LOGS = 'logs';
     const MSG_SOURCE_LIVE = 'live';
@@ -36,11 +32,6 @@ const viewerLogs: Module = () => {
     const IRC_WS_URL = 'wss://irc-ws.chat.twitch.tv:443';
     const MAX_SEEN_MESSAGE_IDS = 5000; // Limit seenMessageIds Set size
     const DUPLICATE_CHECK_WINDOW_MS = 5000; // Window for checking duplicate messages
-    const DEBUG = false; // Set to true to enable debug logging
-
-    // Debug logging helper
-    const log = DEBUG ? (...args) => console.log('[Chat Logs]', ...args) : () => {};
-    const warn = DEBUG ? (...args) => console.warn('[Chat Logs]', ...args) : () => {};
 
     // Emote cache: { channelId: { emotes: Map<name, url>, loading: Promise, loaded: boolean } }
     const emoteCache = new Map();
@@ -82,9 +73,6 @@ const viewerLogs: Module = () => {
         if (msg._timestampMs !== undefined) return msg._timestampMs;
         if (msg.timestamp instanceof Date) {
             const ms = msg.timestamp.getTime();
-            msg._timestampMs = Number.isFinite(ms) ? ms : 0;
-        } else if (typeof msg.timestamp === 'string') {
-            const ms = new Date(msg.timestamp.replace(' ', 'T')).getTime();
             msg._timestampMs = Number.isFinite(ms) ? ms : 0;
         } else {
             msg._timestampMs = 0;
@@ -332,9 +320,6 @@ const viewerLogs: Module = () => {
             // Check cache first
             if (userColorCache.has(lowerUsername)) {
                 const cached = userColorCache.get(lowerUsername);
-                if (typeof cached === 'string') {
-                    return cached;
-                }
                 if (cached && cached.expiresAt > Date.now()) {
                     return cached.color;
                 }
@@ -359,11 +344,10 @@ const viewerLogs: Module = () => {
                     return usernameSpan.style.color;
                 }
             }
-        } catch (e) {
-            warn('Error getting user color:', e);
+        } catch {
+            // A malformed username can make the selector invalid; fall back to the default color.
         }
 
-        // Default Twitch purple
         return '#bf94ff';
     }
 
@@ -371,9 +355,6 @@ const viewerLogs: Module = () => {
     async function getChannelId(channelName) {
         if (channelIdCache.has(channelName)) {
             const cached = channelIdCache.get(channelName);
-            if (typeof cached === 'string') {
-                return cached;
-            }
             if (cached && cached.expiresAt > Date.now()) {
                 return cached.id;
             }
@@ -412,7 +393,7 @@ const viewerLogs: Module = () => {
                     return userInfo.id;
                 }
             } catch (e) {
-                console.error('[Chat Logs] Failed to get channel ID:', e);
+                console.error('[Twitch Plus] Failed to get channel ID:', e);
             }
 
             return null;
@@ -437,14 +418,7 @@ const viewerLogs: Module = () => {
                 .catch(() => null)
             : Promise.resolve(null);
 
-        let globalData;
-        let channelData;
-        try {
-            [globalData, channelData] = await Promise.all([globalP, channelP]);
-        } catch (e) {
-            warn('Failed to fetch 7TV emotes:', e);
-            return emotes;
-        }
+        const [globalData, channelData] = await Promise.all([globalP, channelP]);
 
         if (globalData?.emotes) {
             for (const emote of globalData.emotes) {
@@ -475,14 +449,7 @@ const viewerLogs: Module = () => {
                 .catch(() => null)
             : Promise.resolve(null);
 
-        let globalData;
-        let channelData;
-        try {
-            [globalData, channelData] = await Promise.all([globalP, channelP]);
-        } catch (e) {
-            warn('Failed to fetch BTTV emotes:', e);
-            return emotes;
-        }
+        const [globalData, channelData] = await Promise.all([globalP, channelP]);
 
         if (globalData && Array.isArray(globalData)) {
             for (const emote of globalData) {
@@ -514,14 +481,7 @@ const viewerLogs: Module = () => {
                 .catch(() => null)
             : Promise.resolve(null);
 
-        let globalData;
-        let channelData;
-        try {
-            [globalData, channelData] = await Promise.all([globalP, channelP]);
-        } catch (e) {
-            warn('Failed to fetch FFZ emotes:', e);
-            return emotes;
-        }
+        const [globalData, channelData] = await Promise.all([globalP, channelP]);
 
         if (globalData) {
             for (const setId of globalData.default_sets || []) {
@@ -563,14 +523,7 @@ const viewerLogs: Module = () => {
                 .catch(() => null)
             : Promise.resolve(null);
 
-        let globalData;
-        let channelData;
-        try {
-            [globalData, channelData] = await Promise.all([globalP, channelP]);
-        } catch (e) {
-            warn('Failed to fetch Twitch emotes from adamcy.pl:', e);
-            return emotes;
-        }
+        const [globalData, channelData] = await Promise.all([globalP, channelP]);
 
         if (globalData && Array.isArray(globalData)) {
             for (const emote of globalData) {
@@ -581,21 +534,17 @@ const viewerLogs: Module = () => {
                     }
                 }
             }
-            log(`Loaded ${emotes.size} global Twitch emotes`);
         }
 
         if (channelData && Array.isArray(channelData)) {
-            let channelCount = 0;
             for (const emote of channelData) {
                 if (emote.code && emote.urls && emote.urls.length > 0) {
                     const url = emote.urls.find(u => u.size === '1x')?.url || emote.urls[0]?.url;
                     if (url) {
                         emotes.set(emote.code, { url, provider: 'twitch' });
-                        channelCount++;
                     }
                 }
             }
-            log(`Loaded ${channelCount} Twitch sub emotes for ${channelName}`);
         }
 
         return emotes;
@@ -636,10 +585,7 @@ const viewerLogs: Module = () => {
         emoteCache.set(cacheKey, cacheEntry);
 
         cacheEntry.loading = (async () => {
-            log(`Loading emotes for channel: ${channelName}`);
-
             const channelId = await getChannelId(channelName);
-            log(`Channel ID for ${channelName}: ${channelId}`);
 
             // Fetch all emote sources in parallel
             const [sevenTVEmotes, bttvEmotes, ffzEmotes, twitchEmotes] = await Promise.all([
@@ -650,7 +596,6 @@ const viewerLogs: Module = () => {
             ]);
 
             // Merge all emotes efficiently (7TV takes priority, then BTTV, FFZ, Twitch)
-            // Using spread operator is more efficient than 4 separate loops
             cacheEntry.emotes = new Map([
                 ...twitchEmotes,
                 ...ffzEmotes,
@@ -658,7 +603,6 @@ const viewerLogs: Module = () => {
                 ...sevenTVEmotes
             ]);
 
-            log(`Loaded ${cacheEntry.emotes.size} emotes for ${channelName}`);
             cacheEntry.loaded = true;
             cacheEntry.expiresAt = Date.now() + EMOTE_CACHE_TTL_MS;
         })();
@@ -707,11 +651,8 @@ const viewerLogs: Module = () => {
         });
     }
 
-    // Fetch and cache badge image URLs for a channel (global + channel-specific)
-    // Hardcoded CDN URLs for the most common global badges — used as a fallback when the
-    // Helix API is unreachable. These UUIDs are stable and don't change.
-    // CDN fallbacks when Helix is unavailable. UUIDs from community cheat sheets / Twitch CDN (stable).
-    // Helix + pagination (see fetchAllHelixBadgeJson) is the source of truth when logged in.
+    // Hardcoded CDN URLs for common global badges, used when Helix is unavailable or the user is logged out.
+    // Helix (see fetchAllHelixBadgeJson) is the source of truth when logged in.
     const FALLBACK_GLOBAL_BADGES = {
         moderator:    { 1: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1' },
         vip:          { 1: 'https://static-cdn.jtvnw.net/badges/v1/b817aba4-fad8-49e2-b88a-7cc744dfa6ec/1' },
@@ -814,7 +755,7 @@ const viewerLogs: Module = () => {
         return { data: merged };
     }
 
-    // Read Twitch auth credentials from the page context (userscripts on twitch.tv have access).
+    // Read Twitch auth credentials from the page context (readable from localStorage on twitch.tv).
     function getTwitchApiCredentials() {
         try {
             const authToken = (localStorage.getItem('auth-token') || '')
@@ -880,8 +821,8 @@ const viewerLogs: Module = () => {
                 const [globalJson, channelJson] = await Promise.all([globalP, channelP]);
                 if (globalJson) parseHelixBadges(globalJson);
                 if (channelJson) parseHelixBadges(channelJson);
-            } catch (e) {
-                warn('Failed to fetch badges from Helix:', e);
+            } catch {
+                // Helix is best effort; fallback badges are merged below.
             }
         }
 
@@ -1022,7 +963,6 @@ const viewerLogs: Module = () => {
         const words = messageText.split(WHITESPACE_REGEX);
 
         for (const word of words) {
-            // Skip empty strings
             if (!word) continue;
 
             // Check if it's whitespace only
@@ -1102,7 +1042,7 @@ const viewerLogs: Module = () => {
                     }
                 }
             } catch (e) {
-                console.error('[Chat Logs] Failed to fetch user info:', e);
+                console.error('[Twitch Plus] Failed to fetch user info:', e);
             }
 
             userInfoCache.delete(lowerUsername);
@@ -1332,17 +1272,8 @@ const viewerLogs: Module = () => {
     // Add account created info to viewer card header
     async function addAccountCreatedToCard(viewerCard, username) {
         const createdDate = await fetchUserCreatedAt(username);
-        if (!createdDate) {
-            log('Could not fetch account creation date for', username);
-            return;
-        }
-
-        if (!requestAccountCreatedRender(viewerCard, createdDate)) {
-            log('Could not find info container in banner');
-            return;
-        }
-
-        log(`Added account created date for ${username}: ${formatDateForDisplay(createdDate)}`);
+        if (!createdDate) return;
+        requestAccountCreatedRender(viewerCard, createdDate);
     }
 
     // Get current channel name from URL
@@ -1567,46 +1498,21 @@ const viewerLogs: Module = () => {
 
     // Format timestamp for display (time only, like Twitch's VCML: "17:36")
     function formatTimestamp(timestamp) {
-        // Handle Date object for chat messages
         if (timestamp instanceof Date) {
             const hours = String(timestamp.getHours()).padStart(2, '0');
             const minutes = String(timestamp.getMinutes()).padStart(2, '0');
             return `${hours}:${minutes}`;
-        }
-        // Fallback for string format "2026-01-07 15:40:05" (shouldn't happen normally)
-        if (typeof timestamp === 'string') {
-            try {
-                const date = new Date(timestamp.replace(' ', 'T'));
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                return `${hours}:${minutes}`;
-            } catch (e) {
-                return timestamp;
-            }
         }
         return '?';
     }
 
     // Get date string for date separator (M/D/YYYY format like Twitch)
     function getDateString(timestamp) {
-        // Handle Date object for chat messages
         if (timestamp instanceof Date) {
             const month = timestamp.getMonth() + 1;
             const day = timestamp.getDate();
             const year = timestamp.getFullYear();
             return `${month}/${day}/${year}`;
-        }
-        // Fallback for string format (shouldn't happen normally)
-        if (typeof timestamp === 'string') {
-            try {
-                const date = new Date(timestamp.replace(' ', 'T'));
-                const month = date.getMonth() + 1;
-                const day = date.getDate();
-                const year = date.getFullYear();
-                return `${month}/${day}/${year}`;
-            } catch (e) {
-                return null;
-            }
         }
         return null;
     }
@@ -1633,11 +1539,9 @@ const viewerLogs: Module = () => {
         msgDiv.className = 'Layout-sc-1xcs6mc-0 eRdVkj vcml-message chatlogs-message';
         msgDiv.dataset.timestampMs = String(getTimestampMs(msg));
 
-        // Inner wrapper
         const innerDiv = document.createElement('div');
-        innerDiv.id = crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        innerDiv.id = crypto.randomUUID();
 
-        // Timestamp
         const timestampWrapper = document.createElement('div');
         timestampWrapper.className = 'Layout-sc-1xcs6mc-0 nnbce';
         timestampWrapper.style.display = 'inline';
@@ -1686,7 +1590,6 @@ const viewerLogs: Module = () => {
         }
         innerDiv.appendChild(badgesContainer);
 
-        // Username
         const usernameWrapper = document.createElement('span');
         usernameWrapper.className = 'message-author__username';
         const usernameSpan = document.createElement('span');
@@ -1716,7 +1619,6 @@ const viewerLogs: Module = () => {
             innerDiv.appendChild(separator);
         }
 
-        // Message text
         const messageText = msg.message || '';
         const messageWrapper = document.createElement('span');
 
@@ -2028,30 +1930,24 @@ const viewerLogs: Module = () => {
     async function initializeLogs(channel, username, container, rootContainer) {
         // Start network work immediately so it overlaps the next frame and each other
         const availabilityPromise = fetchLogAvailability(channel, username).catch(e => {
-            console.warn('[Chat Logs] fetchLogAvailability threw:', e.message);
+            console.warn('[Twitch Plus] fetchLogAvailability threw:', e.message);
             return null;
         });
         const emotePromise = loadEmotesForChannel(channel).catch(e => {
-            console.error('[Chat Logs] Emote loading failed:', e);
+            console.error('[Twitch Plus] Emote loading failed:', e);
             return new Map();
         });
         const badgePromise = loadBadgesForChannel(channel).catch(e => {
-            console.error('[Chat Logs] Badge loading failed:', e);
+            console.error('[Twitch Plus] Badge loading failed:', e);
             return new Map();
         });
 
         await new Promise(requestAnimationFrame);
-        if (!document.contains(container)) {
-            log('Container removed before initialization started');
-            return;
-        }
+        if (!document.contains(container)) return;
         try {
             const daysList = await availabilityPromise;
 
-            if (!document.contains(container)) {
-                log('Container removed during initialization, aborting');
-                return;
-            }
+            if (!document.contains(container)) return;
 
             const seenIds = new Set();
             const userColor = getUserColor(username);
@@ -2070,7 +1966,6 @@ const viewerLogs: Module = () => {
                 seenMessageIds: seenIds,
                 isLive: true,
                 lastDisplayedDate: null,
-                emotesLoaded: false,
                 isRefreshing: false,
                 liveMode: null,
                 container: container,
@@ -2092,10 +1987,9 @@ const viewerLogs: Module = () => {
             container.innerHTML = '';
 
             if (hasHistory) {
-                // Historical path: fetch the most recent day, show 10, lazy-load older on scroll
+                // Historical path: fetch the most recent month, show 10, lazy-load older on scroll
                 await loadMoreHistory(container, state);
             } else {
-                container.innerHTML = '';
                 showMoreMessages(container, state);
             }
 
@@ -2115,7 +2009,6 @@ const viewerLogs: Module = () => {
             emotePromise.then(emotes => {
                 if (emotes && emotes.size > 0 && document.contains(container) && state.emotes) {
                     state.emotes = emotes;
-                    state.emotesLoaded = true;
                     rerenderMessagesWithEmotes(container, state);
                 }
             });
@@ -2136,7 +2029,7 @@ const viewerLogs: Module = () => {
             errorDiv.className = 'CoreText-sc-1txzju1-0 cVgnVN chatlogs-error';
             errorDiv.textContent = `Failed to load logs: ${error.message}`;
             container.appendChild(errorDiv);
-            console.error('[Chat Logs] Error:', error);
+            console.error('[Twitch Plus] Error:', error);
         }
     }
 
@@ -2201,7 +2094,6 @@ const viewerLogs: Module = () => {
 
         const stateId = state._stateId;
         if (!document.contains(container)) {
-            log('Container already removed, cleaning up immediately');
             const currentState = activeStates.get(stateId);
             if (currentState) {
                 cleanupState(currentState);
@@ -2210,7 +2102,6 @@ const viewerLogs: Module = () => {
         }
         const observer = new MutationObserver(() => {
             if (!document.contains(container)) {
-                log('Viewer card closed, cleaning up');
                 // Look up state by ID instead of holding direct reference
                 const currentState = activeStates.get(stateId);
                 if (currentState) {
@@ -2234,8 +2125,7 @@ const viewerLogs: Module = () => {
             if (rootContainer) {
                 updateHeaderMeta(rootContainer, state);
             }
-        } catch (e) {
-            warn('IRC subscribe failed:', e);
+        } catch {
             state.liveMode = 'disconnected';
             const rootContainer = container.closest('.enhancer-chatlogs');
             if (rootContainer) {
@@ -2262,8 +2152,6 @@ const viewerLogs: Module = () => {
             cleanupState(state);
             renderLoadingSkeleton(container);
             await initializeLogs(channel, username, container, rootContainer);
-        } catch (e) {
-            warn('Refresh failed:', e);
         } finally {
             if (triggerButton && document.contains(triggerButton)) {
                 triggerButton.disabled = false;
@@ -2295,10 +2183,6 @@ const viewerLogs: Module = () => {
         const loadingDiv = container.querySelector('.chatlogs-loading');
         if (loadingDiv) {
             loadingDiv.remove();
-        }
-        const skeletonDiv = container.querySelector('.chatlogs-skeleton');
-        if (skeletonDiv) {
-            skeletonDiv.remove();
         }
 
         // Find the count info element (sticky at bottom)
@@ -2385,10 +2269,6 @@ const viewerLogs: Module = () => {
         if (loadingDiv) {
             loadingDiv.remove();
         }
-        const skeletonDiv = container.querySelector('.chatlogs-skeleton');
-        if (skeletonDiv) {
-            skeletonDiv.remove();
-        }
 
         if (totalMessages === 0) {
             container.innerHTML = '';
@@ -2403,10 +2283,8 @@ const viewerLogs: Module = () => {
             return;
         }
 
-        const messagesToShow = MESSAGES_PER_PAGE;
-
         // Calculate which messages to show (from the end, going backwards)
-        const startIndex = Math.max(0, totalMessages - displayedCount - messagesToShow);
+        const startIndex = Math.max(0, totalMessages - displayedCount - MESSAGES_PER_PAGE);
         const endIndex = totalMessages - displayedCount;
         const newMessages = state.allMessages.slice(startIndex, endIndex);
 
@@ -2414,17 +2292,6 @@ const viewerLogs: Module = () => {
         const existingCount = container.querySelector('.chatlogs-count');
         if (existingCount) {
             existingCount.remove();
-        }
-
-        // Get the date of the first currently displayed message (to know where to insert separators)
-        const firstDisplayedMsg = container.querySelector('.chatlogs-message');
-        let nextDateInContainer = null;
-        if (firstDisplayedMsg && state.displayedCount > 0) {
-            // Find the message data for the first displayed message
-            const firstDisplayedIndex = totalMessages - displayedCount;
-            if (firstDisplayedIndex < totalMessages) {
-                nextDateInContainer = getDateString(state.allMessages[firstDisplayedIndex].timestamp);
-            }
         }
 
         // Create message elements with date separators (prepend to show older messages at top)
@@ -2442,16 +2309,6 @@ const viewerLogs: Module = () => {
             }
 
             fragment.appendChild(createMessageElement(msg, emotes, userColor, badges));
-        }
-
-        // If we have messages and the last message's date differs from the first existing message's date,
-        // we need to add a separator before the existing content
-        if (nextDateInContainer && lastDateInBatch && nextDateInContainer !== lastDateInBatch) {
-            // Remove the old date separator if it exists at the top
-            const oldTopSeparator = container.querySelector('.chatlogs-date-separator');
-            if (oldTopSeparator && oldTopSeparator === container.firstChild?.nextSibling) {
-                // Keep it, the new batch will flow into it
-            }
         }
 
         // Save scroll position before inserting (to maintain user's view)
@@ -2491,7 +2348,7 @@ const viewerLogs: Module = () => {
         }
     }
 
-    // Fetch the next oldest day from the historical API, prepend messages, render more
+    // Fetch the next oldest month from the historical API, prepend messages, render more
     async function loadMoreHistory(container, state) {
         if (state.isLoadingMore) return;
 
@@ -2526,10 +2383,10 @@ const viewerLogs: Module = () => {
         }
 
         try {
-            // Keep trying days until we collect at least one new message or run out.
-            // This prevents empty-day entries (e.g. today with no activity yet) from
+            // Keep trying months until we collect at least one new message or run out.
+            // This prevents empty entries (e.g. a month with no activity yet) from
             // causing a false "No messages found" on the very first load.
-            // A per-day fetch error (404 etc.) is treated as an empty day, not a fatal abort.
+            // A per-month fetch error (404 etc.) is treated as an empty month, not a fatal abort.
             const MAX_EMPTY_DAYS = 10;
             let emptyDayStreak = 0;
             let newMsgs = [];
@@ -2544,7 +2401,7 @@ const viewerLogs: Module = () => {
                 try {
                     messages = await fetchLogMonth(state.channel, state.username, month.year, month.month);
                 } catch (dayErr) {
-                    console.warn('[Chat Logs] fetchLogMonth failed for', month, '—', dayErr.message, '(skipping)');
+                    console.warn('[Twitch Plus] fetchLogMonth failed for', month, '—', dayErr.message, '(skipping)');
                 }
 
                 const deduped = messages.filter(msg => {
@@ -2575,7 +2432,7 @@ const viewerLogs: Module = () => {
                 state.hasMoreHistory = false;
             }
         } catch (e) {
-            console.error('[Chat Logs] loadMoreHistory fatal error:', e);
+            console.error('[Twitch Plus] loadMoreHistory fatal error:', e);
             state.hasMoreHistory = false;
         } finally {
             loadingEl.remove();
@@ -2658,8 +2515,6 @@ const viewerLogs: Module = () => {
         container.appendChild(countInfo);
 
         const rootContainer = container.closest('.enhancer-chatlogs');
-
-
         if (rootContainer) {
             updateHeaderMeta(rootContainer, state);
         }
@@ -2701,7 +2556,6 @@ const viewerLogs: Module = () => {
         const username = getUsernameFromCard(viewerCard);
 
         if (!channel || !username) {
-            log('Could not determine channel or username');
             return;
         }
 
@@ -2710,9 +2564,7 @@ const viewerLogs: Module = () => {
         getChannelId(channel).catch(() => {});
 
         // Add account created date to header (async, fire and forget)
-        addAccountCreatedToCard(viewerCard, username).catch(e => {
-            warn('Failed to add account created date:', e);
-        });
+        addAccountCreatedToCard(viewerCard, username).catch(() => {});
 
         const { wrapper: logsWrapper, toggle: toggleLogs } = createLogsToggleSection(channel, username);
 
@@ -2785,7 +2637,6 @@ const viewerLogs: Module = () => {
             }
         }
 
-        log(`Enhanced viewer card for ${username} in ${channel}`);
     }
 
     // Kick off fetchUserInfo as soon as the username link is available in the positioner,
@@ -2865,11 +2716,7 @@ const viewerLogs: Module = () => {
         const channel = getCurrentChannel();
         if (channel && channel !== currentChannel) {
             currentChannel = channel;
-            log('Preloading emotes for channel:', channel);
-            // Fire and forget - don't await
-            loadEmotesForChannel(channel).catch(e => {
-                warn('Preload emotes failed:', e);
-            });
+            loadEmotesForChannel(channel).catch(() => {});
         }
     }
 
@@ -2910,7 +2757,6 @@ const viewerLogs: Module = () => {
         });
     }
 
-
     // Periodic cleanup of expired cache entries
     // Only runs when page is visible, pauses when hidden
     function startCacheCleanup() {
@@ -2928,14 +2774,14 @@ const viewerLogs: Module = () => {
 
             // Clean expired channel ID cache entries
             for (const [key, entry] of channelIdCache) {
-                if (typeof entry === 'object' && entry.expiresAt && entry.expiresAt <= now) {
+                if (entry.expiresAt && entry.expiresAt <= now) {
                     channelIdCache.delete(key);
                 }
             }
 
             // Clean expired user color cache entries
             for (const [key, entry] of userColorCache) {
-                if (typeof entry === 'object' && entry.expiresAt && entry.expiresAt <= now) {
+                if (entry.expiresAt && entry.expiresAt <= now) {
                     userColorCache.delete(key);
                 }
             }
@@ -2946,8 +2792,6 @@ const viewerLogs: Module = () => {
                     userInfoCache.delete(key);
                 }
             }
-
-            log('Cache cleanup completed');
         };
 
         const startInterval = () => {
@@ -3074,22 +2918,6 @@ const viewerLogs: Module = () => {
                 color: var(--color-text-alt-2, #adadb8); font-variant-numeric: tabular-nums; opacity: 1 !important;
             }
 
-
-
-            /* Section header toggle */
-            .enhancer-chatlogs-section-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                cursor: pointer;
-                padding: 5px 0;
-                user-select: none;
-                width: 100%;
-            }
-            .enhancer-chatlogs-section-header:hover { opacity: 0.8; }
-            .enhancer-chatlogs-chevron { transition: transform 0.2s ease; }
-            .enhancer-chatlogs-chevron.is-open { transform: rotate(180deg); }
-
             /* Date separator - horizontal rule with centered date */
             .chatlogs-date-separator {
                 display: flex;
@@ -3143,8 +2971,6 @@ const viewerLogs: Module = () => {
             /* Count footer */
             .chatlogs-count { opacity: 0.65; text-align: center; }
 
-            /* Load more - full width */
-            /* Open Full History link */
             .chatlogs-link { font-size: 1.2rem; white-space: nowrap; }
 
             /* Emote images */
@@ -3233,7 +3059,6 @@ const viewerLogs: Module = () => {
     } else {
         init();
     }
-
 
     } catch (error) {
       console.error('[Twitch Plus] viewerLogs', error);

@@ -1,14 +1,9 @@
 // @ts-nocheck
-// Verbatim port of twitch-chat-link-cards.user.js 1.5.0, lines 27-726 (the body of its IIFE), with one change:
-// the 'Also for chat history on join' option comes from the popup instead of localStorage.
-// GM_xmlhttpRequest is replaced by gmRequest (lib/relay.ts), which has the background worker do the fetch.
-// Its duplicate guard (window.__twitchChatLinkCards) is unchanged, so a still-installed userscript and this never both run.
+// Replaces Twitch's native chat link previews with resolved link cards (title, description, thumbnail).
 import type { Module } from '../modules';
 import { gmRequest } from '../relay';
 
 const linkCards: Module = (options) => {
-  const GM_xmlhttpRequest = gmRequest;
-  'use strict';
   // Native flow (chat line renderer, module 355585 on 2026-10-24, minified names vary):
   //   switch (part.type) {
   //     case X.Link:     parts.push(link(...)); break;
@@ -18,20 +13,12 @@ const linkCards: Module = (options) => {
   // The Link case gets the same card line as ClipLink. The card is Twitch's own presentational
   // ChatCard ({data, header, buttonSlot}), which draws its own skeleton while data is missing.
   // Source is rewritten only when every anchor matches; otherwise the module runs unchanged.
-  // With any @grant other than none, the script's `window` is the manager's wrapper, not the page:
-  // Twitch's chunk queue and the status object must go on the real page window.
-  /* global unsafeWindow */
-  const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+  const page = window;
   if (page.__twitchChatLinkCards) return;
   const status = page.__twitchChatLinkCards = {
-    version: '1.5.0', state: 'starting', moduleId: null, requests: 0, resolved: 0, failed: 0, dropped: 0, lastError: null,
+    state: 'starting', moduleId: null, requests: 0, resolved: 0, failed: 0, dropped: 0, lastError: null,
   };
-  let disabled = false, includeHistory = false;
-  try {
-    disabled = localStorage.getItem('twitchChatLinkCards.disabled') === '1';
-    includeHistory = options.history === true; // Twitch Plus: from the popup instead of localStorage
-  } catch (_) {}
-  if (disabled) { status.state = 'disabled'; return; }
+  const includeHistory = options.history === true;
 
   const KNOWN_ID = '355585';
   const MARKERS = ['"chat-card-title"', '.ClipLink:', '.Link:', 'disableChatCard', 'buttonSlot'];
@@ -56,14 +43,14 @@ const linkCards: Module = (options) => {
     const [, cardVar, jsx] = clip;
     // The clip card's "View" button: Layout > Button > text wrapper, with Twitch's own translation.
     const button = new RegExp(`\\(0,${ID}\\.jsx\\)\\((${REF}),\\{display:(${REF}\\.Flex),alignItems:(${REF}\\.Center),padding:1,children:\\(0,${ID}\\.jsx\\)\\((${REF}),\\{variant:"primary",size:"small",linkTo:${ID},targetBlank:!0,children:\\(0,${ID}\\.jsx\\)\\((${REF}),\\{children:(\\(0,${REF}\\)\\("View","ClipsChatCard"\\))\\}\\)\\}\\)\\}\\)`).exec(source);
-    const deps = [`React:${react[1]}`, `jsx:${jsx}.jsx`, `Card:${card[1]}`];
+    const bindings = [`React:${react[1]}`, `jsx:${jsx}.jsx`, `Card:${card[1]}`];
     // The card's style switch (newer style: header row and View button). Optional: without it the
     // site name always goes in the description line.
     const style = new RegExp(`background:\\(0,(${REF})\\)\\(\\)\\?`).exec(source.slice(card.index, card.index + 4000));
-    if (style) deps.push(`newStyle:()=>(0,${style[1]})()`);
+    if (style) bindings.push(`newStyle:()=>(0,${style[1]})()`);
     if (button) {
       const [, layout, flex, center, btn, text, view] = button;
-      deps.push(`Layout:${layout}`, `flex:${flex}`, `center:${center}`, `Button:${btn}`, `ButtonText:${text}`, `view:()=>${view}`);
+      bindings.push(`Layout:${layout}`, `flex:${flex}`, `center:${center}`, `Button:${btn}`, `ButtonText:${text}`, `view:()=>${view}`);
     }
     // Only names local to the renderer (card variable, part, options) are used inside it; module
     // names are handed over once at the end of the factory, where nothing shadows them.
@@ -76,7 +63,7 @@ const linkCards: Module = (options) => {
       new RegExp(`let (${ID})=\\(0,(${REF})\\)\\((${ID})\\.contentURL,(\\{tt_medium:"twitch_chat",tt_content:"chat_card"\\})\\)`),
       (_, url, track, data, params) => `let ${url}=${data}.external?${data}.contentURL:(0,${track})(${data}.contentURL,${params})`);
     const close = patched.lastIndexOf('}');
-    patched = `${patched.slice(0, close)};__linkCards.bind({${deps.join(',')}});${patched.slice(close)}`;
+    patched = `${patched.slice(0, close)};__linkCards.bind({${bindings.join(',')}});${patched.slice(close)}`;
     return patched;
   }
 
@@ -239,7 +226,7 @@ const linkCards: Module = (options) => {
 
   function lookup(url) {
     let entry = cache.get(url);
-    if (!entry && (entry = fromStore(url))) status.storeHits = (status.storeHits || 0) + 1;
+    if (!entry) entry = fromStore(url);
     if (entry) { cache.delete(url); cache.set(url, entry); return entry; }
     entry = { state: 'pending', preview: null };
     entry.promise = new Promise(resolve => queue.push({ url, entry, resolve }));
@@ -262,12 +249,10 @@ const linkCards: Module = (options) => {
       const job = queue.pop();
       active++;
       status.requests++;
-      const started = performance.now();
       resolve(job.url).then(preview => withShape(preview, job.url)).then(preview => {
         job.entry.preview = preview;
         job.entry.state = job.entry.preview ? 'done' : 'failed';
         status[job.entry.preview ? 'resolved' : 'failed']++;
-        status.lastMs = Math.round(performance.now() - started);
         toStore(job.url, preview);
       }, () => {
         job.entry.state = 'failed';
@@ -425,11 +410,8 @@ const linkCards: Module = (options) => {
 
   // Like request(), but HTML only, and with the final URL after redirects.
   function requestPage(url) {
-    const gm = typeof GM_xmlhttpRequest === 'function' ? GM_xmlhttpRequest
-      : typeof GM !== 'undefined' && typeof GM?.xmlHttpRequest === 'function' ? GM.xmlHttpRequest : null;
-    if (!gm) return Promise.reject(new Error('GM_xmlhttpRequest unavailable'));
     return new Promise((resolve, reject) => {
-      gm({
+      gmRequest({
         method: 'GET', url, timeout: PAGE_TIMEOUT, anonymous: true,
         headers: { 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9' },
         onload: response => {
@@ -506,15 +488,8 @@ const linkCards: Module = (options) => {
   }
 
   function request(url, headers = {}) {
-    /* global GM_xmlhttpRequest, GM */
-    const gm = typeof GM_xmlhttpRequest === 'function' ? GM_xmlhttpRequest
-      : typeof GM !== 'undefined' && typeof GM?.xmlHttpRequest === 'function' ? GM.xmlHttpRequest : null;
-    if (!gm) {
-      status.lastError = 'GM_xmlhttpRequest unavailable';
-      return Promise.reject(new Error(status.lastError));
-    }
     return new Promise((resolve, reject) => {
-      gm({
+      gmRequest({
         method: 'GET', url, headers, timeout: TIMEOUT, anonymous: true,
         onload: response => (response.status === 200 ? resolve(response.responseText) : reject(new Error(`HTTP ${response.status}`))),
         onerror: () => reject(new Error('network')),
@@ -542,7 +517,7 @@ const linkCards: Module = (options) => {
     // Some sources escape twice ("&#34;in real life&#34;").
     const clean = segments.map(s => oneLine(/&(#\d+|#x[\da-f]+|[a-z]+);/i.test(s) ? decodeEntities(s) : s))
       .filter(s => s && !/^URL:/i.test(s));
-    const thumbnail = typeof json.thumbnail === 'string' && /^https:\/\//.test(json.thumbnail) ? json.thumbnail : null;
+    const thumbnail = httpsOrNull(json.thumbnail);
     const title = cleanTitle(clean.shift() || '', url);
     if (!title) {
       const file = fileOf(url);
@@ -656,7 +631,7 @@ const linkCards: Module = (options) => {
     const plays = Number(item.stats?.playCount);
     const description = Number.isFinite(plays) && plays > 0
       ? `${name} · ${new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(plays)} plays` : name;
-    const cover = [item.video?.cover, item.video?.originCover].find(u => typeof u === 'string' && /^https:\/\//.test(u)) || null;
+    const cover = [item.video?.cover, item.video?.originCover].find(u => httpsOrNull(u)) || null;
     const width = Number(item.video?.width), height = Number(item.video?.height);
     return {
       title: (typeof item.desc === 'string' && item.desc.trim() || `TikTok by @${handle}`).replace(/\s+/g, ' ').slice(0, 200),
@@ -668,13 +643,13 @@ const linkCards: Module = (options) => {
 
   // ---- Module hook ----------------------------------------------------------------------------
 
-  // Capture the native runtime through a harmless empty chunk, as Preferred Quality does, so
-  // Rewind's push hook is left alone. The renderer is caught by its known module ID, or by
+  // Capture the native runtime through a harmless empty chunk, so other
+  // scripts' chunk push hooks are left alone. The renderer is caught by its known module ID, or by
   // fingerprint in chunks loaded later (in case the ID changes).
   const wrapped = new WeakSet();
   const chunks = page.webpackChunktwitch_twilight = page.webpackChunktwitch_twilight || [];
   if (!Array.isArray(chunks)) { status.state = 'unsupported-runtime'; return; }
-  chunks.push([['userscript:chat-link-cards:1.5.0'], {}, require => {
+  chunks.push([['twitch-plus:link-cards'], {}, require => {
     if (!require.m || typeof require.e !== 'function') { status.state = 'unsupported-runtime'; return; }
     const descriptor = Object.getOwnPropertyDescriptor(require.m, KNOWN_ID);
     if (descriptor && (!descriptor.configurable || descriptor.get || descriptor.set)) status.state = 'module-hook-conflict';

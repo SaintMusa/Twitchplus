@@ -16,7 +16,7 @@ export interface FetchResult {
   status: number;
   text: string;
   finalUrl: string;
-  /** "name: value" lines, as GM_xmlhttpRequest's responseHeaders. */
+  /** One "name: value" per line. */
   headers: string;
   error?: 'network' | 'timeout' | 'blocked';
 }

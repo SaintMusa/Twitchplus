@@ -1,11 +1,8 @@
 // @ts-nocheck
-// Verbatim port of Twitch Native Rewind 1.6.5 (twitch-native-rewind.user.js, body of its IIFE), lines 21-648 of the userscript.
-// Kept unchanged so fixes can be compared line by line with the userscript; adding types is a later refactor.
-// Its own duplicate guard and storage keys are unchanged, so a still-installed userscript and this never both run.
+// Unlocks Twitch's native DVR rewind by patching its eligibility module, and serves archive playback lookups.
 import type { Module } from '../modules';
 
 const rewind: Module = () => {
-  'use strict';
   let disabled = false, debug = false;
   try {
     disabled = localStorage.getItem('twitchNativeRewind.disabled') === '1';
@@ -16,8 +13,8 @@ const rewind: Module = () => {
   const installationKey = Symbol.for('twitchNativeRewind.installed');
   const existingQueue = window.webpackChunktwitch_twilight;
   if (!disabled && existingQueue?.[installationKey]) return;
-  const status = { version: '1.6.5', state: disabled ? 'disabled' : 'starting', matched: 0, executed: 0, moduleId: null, verifiedBuild: null, roles: null, calls: {}, lastEligibility: null };
-  const bridgeStatus = { version: '0.4.1', state: disabled ? 'disabled' : 'starting', channel: null, lookups: 0, supplied: 0, failures: 0, last: null };
+  const status = { state: disabled ? 'disabled' : 'starting', matched: 0, executed: 0, moduleId: null, verifiedBuild: null, roles: null, calls: {}, lastEligibility: null };
+  const bridgeStatus = { state: disabled ? 'disabled' : 'starting', channel: null, lookups: 0, supplied: 0, failures: 0, last: null };
   let syncBridgeRoute = () => {};
   const events = [];
   const info = (...args) => { if (debug) console.info('[Twitch Native Rewind]', ...args); };
@@ -47,14 +44,14 @@ const rewind: Module = () => {
   // Only supported runtimes are hooked; unknown runtimes keep native behavior.
   const CHUNK_GLOBALS = ['webpackChunktwitch_twilight'];
   const sourceOf = fn => { try { return Function.prototype.toString.call(fn); } catch (_) { return ''; } };
-  const escape = name => name.replace(/\$/g, '\\$');
+  const escapeRegExp = name => name.replace(/\$/g, '\\$');
   function paramsOf(source) {
     const match = /^\(?\s*([\w$\s,]*?)\s*\)?\s*=>/.exec(source) || /^function\s*[\w$]*\s*\(([\w$\s,]*)\)/.exec(source);
     return match ? match[1].split(',').map(p => p.trim()).filter(Boolean) : null;
   }
   // Index of the single parameter read as `param.property`, or -1.
   function paramUsing(source, params, property) {
-    const found = params.map((p, i) => new RegExp(`(?:^|[^\\w$.])${escape(p)}\\.${property}\\b`).test(source) ? i : -1).filter(i => i >= 0);
+    const found = params.map((p, i) => new RegExp(`(?:^|[^\\w$.])${escapeRegExp(p)}\\.${property}\\b`).test(source) ? i : -1).filter(i => i >= 0);
     return found.length === 1 ? found[0] : -1;
   }
   function matchingBrace(source, open) {
@@ -149,7 +146,7 @@ const rewind: Module = () => {
     }
     const names = new Set([...experiments.keys(), ...helpers.keys()]);
     for (const name of names) {
-      const escaped = escape(name);
+      const escaped = escapeRegExp(name);
       const write = new RegExp(`(^|[^\\w$.])${escaped}\\s*(?:&&=|\\|\\|=|\\?\\?=|\\*\\*=|>>>=|>>=|<<=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|=(?!=|>))`, 'g');
       for (const match of body.matchAll(write)) {
         const offset = match.index + match[1].length;
@@ -255,17 +252,17 @@ const rewind: Module = () => {
     if (source.includes('isDvrEligible')) {
       const stream = paramUsing(source, params, 'isDvrEligible'), channel = paramUsing(source, params, 'isAffiliate');
       if (stream < 0 || channel < 0 || stream === channel) return null;
-      let special = params.findIndex(p => new RegExp(`if\\(\\s*!?\\s*${escape(p)}\\s*\\)`).test(source));
-      // New builds express the same leading special-case check as a ternary.
+      let special = params.findIndex(p => new RegExp(`if\\(\\s*!?\\s*${escapeRegExp(p)}\\s*\\)`).test(source));
+      // The leading special-case check can also be written as a ternary.
       // Only inspect the start of the body; nested conditions can use the viewer.
       if (special < 0 && source.includes('=>')) {
         const body = source.slice(source.indexOf('=>') + 2).trim();
-        special = params.findIndex(p => new RegExp(`^\\(?\\s*${escape(p)}\\s*\\?`).test(body));
+        special = params.findIndex(p => new RegExp(`^\\(?\\s*${escapeRegExp(p)}\\s*\\?`).test(body));
       }
       if (special === stream || special === channel) special = -1;
       return { role: 'eligibility', stream, channel, special };
     }
-    // Since October 16 the same module also exports a channel availability reason.
+    // The same module can also export a channel availability reason.
     // It returns strings/null, not eligibility; keep its native function untouched.
     if (params.length === 1 && paramUsing(source, params, 'isParticipatingDJ') === 0 &&
         paramUsing(source, params, 'isAffiliate') === 0 && paramUsing(source, params, 'isPartner') === 0 &&
@@ -314,7 +311,7 @@ const rewind: Module = () => {
       plan[name] = override(name, info, original);
     }
     const count = role => Object.values(roles).filter(r => r === role).length;
-    // Native rollout exports stay untouched, so any number is safe (October 21 builds export two).
+    // Native rollout exports stay untouched, so any number is safe (some builds export two).
     if (count('eligibility') !== 1 || count('channel') !== 1 || count('flag') < 2 ||
         !flagExperiments.includes('savvy-part-1') || !flagExperiments.includes('savvy-part-1-flag') ||
         count('availabilityReason') > 1) return null;
@@ -346,7 +343,7 @@ const rewind: Module = () => {
             status.state = 'unsupported-build';
             return forward();
           }
-          // Twitch now supports require.d(exports, getters, directValues).
+          // Twitch's require.d accepts (exports, getters, directValues).
           // Keep the argument lists intact: dropping values removes exports and
           // crashes the channel page before the player can mount.
           const direct = values && typeof values === 'object' ? values : {};
@@ -361,7 +358,7 @@ const rewind: Module = () => {
             if (result === undefined) return null; // circular import reached early; retry next access
             plan = result;
             if (plan) { status.state = 'active'; info('DVR gate active. Actual rewind playback is not yet confirmed.', status.roles); }
-            else { status.state = 'unsupported-build'; warn('DVR module exports did not match the expected roles; original behaviour kept. The script needs an update.'); }
+            else { status.state = 'unsupported-build'; warn('DVR module exports did not match the expected roles; original behaviour kept.'); }
             return plan;
           };
           const getters = {};
@@ -378,7 +375,7 @@ const rewind: Module = () => {
       const factoryArgs = [...arguments];
       factoryArgs[2] = requireProxy;
       const result = Reflect.apply(original, this, factoryArgs);
-      if (!intercepted) { status.state = 'unsupported-build'; warn('DVR module no longer exports through require.d; original behaviour kept. The script needs an update.'); }
+      if (!intercepted) { status.state = 'unsupported-build'; warn('DVR module no longer exports through require.d; original behaviour kept.'); }
       else if (status.state === 'patched-awaiting-execution') status.state = 'executed-awaiting-use';
       return result;
     };
@@ -440,7 +437,7 @@ const rewind: Module = () => {
   }
   if (!CHUNK_GLOBALS.filter(hookQueue).length) {
     status.state = 'too-late-or-conflict';
-    warn('Twitch runtime or another hook already started. Enable document-start/page-context injection, disable other rewind patches, and reload.');
+    warn('Twitch runtime or another hook already started. Another rewind patch or an early Twitch runtime start may be interfering; reload.');
     return;
   }
   if (!status.matched) status.state = 'waiting-for-module';
@@ -451,8 +448,8 @@ const rewind: Module = () => {
   }
   function installArchiveBridge() {
     if (typeof window.fetch !== 'function') { bridgeStatus.state = 'unavailable'; return; }
-    const status = bridgeStatus;
-    status.state = 'installed';
+    const bridge = bridgeStatus;
+    bridge.state = 'installed';
     const fetchBeforeBridge = window.fetch;
     const cache = new Map();
     const controllers = new Set();
@@ -462,7 +459,7 @@ const rewind: Module = () => {
       return match ? match[1].toLowerCase() : null;
     };
     let routeChannel = channelAtRoute();
-    status.channel = routeChannel;
+    bridge.channel = routeChannel;
     syncBridgeRoute = () => {
       const next = channelAtRoute();
       if (next === routeChannel) return generation;
@@ -471,7 +468,7 @@ const rewind: Module = () => {
       cache.clear();
       for (const controller of controllers) controller.abort();
       controllers.clear();
-      Object.assign(status, { state: 'installed', channel: next, lookups: 0, supplied: 0, failures: 0, last: null });
+      Object.assign(bridge, { state: 'installed', channel: next, lookups: 0, supplied: 0, failures: 0, last: null });
       clearChannelDiagnostics();
       return generation;
     };
@@ -540,7 +537,7 @@ const rewind: Module = () => {
     // Returns { id, streamStart }, null for a definite no-match, or { failed: true }.
     async function discover(channel, started) {
       if (!current(channel, started)) return null;
-      status.lookups++;
+      bridge.lookups++;
       const controller = new AbortController();
       controllers.add(controller);
       const timeout = setTimeout(() => controller.abort(), 1500);
@@ -603,13 +600,13 @@ const rewind: Module = () => {
             const archive = await listedArchive(op.channel, started);
             if (!current(op.channel, started)) return;
             if (archive?.failed) {
-              status.failures++;
-              status.last = { channel: op.channel, matchingArchiveFound: false, lookupFailed: true };
-              status.state = 'lookup-failed';
+              bridge.failures++;
+              bridge.last = { channel: op.channel, matchingArchiveFound: false, lookupFailed: true };
+              bridge.state = 'lookup-failed';
               return;
             }
-            status.last = { channel: op.channel, matchingArchiveFound: !!archive };
-            if (!archive) { status.state = 'no-matching-public-archive'; return; }
+            bridge.last = { channel: op.channel, matchingArchiveFound: !!archive };
+            if (!archive) { bridge.state = 'no-matching-public-archive'; return; }
             dvr[field] = archive.id;
             changed = true;
             additions.push(op.channel);
@@ -621,8 +618,8 @@ const rewind: Module = () => {
           // Only the missing vod ID changes. Tokens and playback requests are never
           // rewritten. A synthetic response does not retain URL/redirect metadata.
           const patched = new Response(JSON.stringify(json), { status: response.status, statusText: response.statusText, headers });
-          status.supplied += additions.length;
-          status.state = 'archive-id-supplied';
+          bridge.supplied += additions.length;
+          bridge.state = 'archive-id-supplied';
           if (debug) for (const channel of additions) {
             events.push({ event: 'bridge-archive-supplied', channel, vodIDPresent: true });
             if (events.length > 40) events.shift();
