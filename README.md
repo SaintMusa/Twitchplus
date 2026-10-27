@@ -3,6 +3,12 @@
 A browser extension (Chrome and Firefox) that adds features to Twitch which look and behave like Twitch's own.
 Each feature can be turned on or off, by section, in the extension's popup.
 
+This is a personal project, built for my own use and shared as it is. It is not affiliated with or endorsed by Twitch,
+and I make no promises about support or updates. Issues and pull requests are welcome, but I may not get to them.
+
+**AI disclosure:** this project was built with a lot of help from AI (Claude, by Anthropic). The AI wrote and edited
+much of the code, and I directed it and tested the features myself. If that is a dealbreaker for you, now you know.
+
 | Section | Feature |
 |---|---|
 | Player | Live rewind seek bar |
@@ -63,7 +69,17 @@ off by default.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The ad-blocking feature is based on vaft from
-[pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT); its licence notice is kept in
-`lib/modules/vaft-*.ts`. Watch sub-only VODs is based on [besuper/TwitchNoSub](https://github.com/besuper/TwitchNoSub)
-(Apache-2.0); see the header of `lib/modules/sub-only-vods.ts`.
+MIT, see [LICENSE](LICENSE). Code taken from other projects keeps its own licence, listed below.
+
+## Credits
+
+Some features are built on other people's work, and this project would be missing them without it:
+
+- **Block ads** is based on vaft from [pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT),
+  with credit to its contributors and to the projects it credits in turn. Its licence notice is kept in `lib/modules/vaft-*.ts`.
+- **Watch sub-only VODs** is based on [besuper/TwitchNoSub](https://github.com/besuper/TwitchNoSub) (Apache-2.0).
+  See the header of `lib/modules/sub-only-vods.ts` for the licence notice and what was changed.
+- **Link preview cards** use [Chatterino](https://chatterino.com)'s public link resolver.
+- **Chat logs on viewer cards** read from [logs.zonian.dev](https://logs.zonian.dev).
+
+Twitch is a trademark of Twitch Interactive, Inc.
