@@ -9,6 +9,7 @@ Each feature can be turned on or off, by section, in the extension's popup.
 | Player | Preferred quality |
 | Player | Live delay on the LIVE badge |
 | Player | Screenshot button |
+| Player | Watch sub-only VODs |
 | Chat | Chat and search hotkeys (`/` and `?`) |
 | Chat | Keep chat paused while hovering |
 | Chat | Link preview cards (asks for access to all sites when switched on) |
@@ -64,4 +65,5 @@ off by default.
 
 MIT, see [LICENSE](LICENSE). The ad-blocking feature is based on vaft from
 [pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT); its licence notice is kept in
-`lib/modules/vaft-*.ts`.
+`lib/modules/vaft-*.ts`. Watch sub-only VODs is based on [besuper/TwitchNoSub](https://github.com/besuper/TwitchNoSub)
+(Apache-2.0); see the header of `lib/modules/sub-only-vods.ts`.

@@ -70,6 +70,12 @@ export const SECTIONS: Section[] = [
         description: 'Saves the current frame as a PNG at the playback resolution.',
         default: true,
       },
+      {
+        id: 'subOnlyVods',
+        label: 'Watch sub-only VODs',
+        description: 'Plays subscriber-only VODs by rebuilding their playlist from the public storyboard link, and hides the lock on their cards. Based on TwitchNoSub (Apache-2.0).',
+        default: true,
+      },
     ],
   },
   {

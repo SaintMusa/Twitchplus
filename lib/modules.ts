@@ -8,6 +8,7 @@ import pins from './modules/pins';
 import preferredQuality from './modules/preferred-quality';
 import rewind from './modules/rewind';
 import screenshot from './modules/screenshot';
+import subOnlyVods from './modules/sub-only-vods';
 import viewerLogs from './modules/viewer-logs';
 
 /** Runs in twitch.tv's page context at document start, once, only when its feature is on. */
@@ -20,6 +21,7 @@ export const MODULES: Record<string, Module> = {
   quality: preferredQuality,
   latency,
   screenshot,
+  subOnlyVods,
   chatHotkeys,
   hoverPause,
   linkCards,
