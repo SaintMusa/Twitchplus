@@ -36,7 +36,7 @@ const pins: Module = () => whenRoot(() => {
 
     window.__twitchNativePinsReport = () => ({
       pinned: pins.length, folders: folders.map(folder => `${folder.name} (${folder.members.length})`),
-      byCategory: options.byCategory, hookedSections: sections().filter(({ node }) => hooked.has(node)).length,
+      byCategory: options.byCategory, pinnedCategories: options.pinnedCategories.length, hookedSections: sections().filter(({ node }) => hooked.has(node)).length,
     });
 
     const ICONS = {
@@ -45,6 +45,7 @@ const pins: Module = () => whenRoot(() => {
       more: 'M4 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm4.5 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Zm4.5 0a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z',
       category: 'M3 3h6v6H3V3Zm2 2v2h2V5H5Zm6-2h6v6h-6V3Zm2 2v2h2V5h-2ZM3 11h6v6H3v-6Zm2 2v2h2v-2H5Zm6-2h6v6h-6v-6Zm2 2v2h2v-2h-2Z',
       check: 'M8 13.2 4.8 10l-1.4 1.4L8 16l9-9-1.4-1.4L8 13.2Z',
+      pin: 'M12.6 2 18 7.4l-1.4 1.4-1-1-3.2 3.2.4 3.6-1.4 1.4-3.2-3.2L4 17l-1-1 4.2-4.2L4 8.6l1.4-1.4 3.6.4 3.2-3.2-1-1L12.6 2Z',
     };
 
     const style = document.createElement('style');
@@ -86,7 +87,7 @@ const pins: Module = () => whenRoot(() => {
       .musa-twitch-tool svg{width:1.6rem;height:1.6rem;fill:currentColor;pointer-events:none}
       .musa-twitch-tool--chevron svg{transition:transform .15s ease}
       .musa-twitch-tool--chevron[aria-expanded="false"] svg{transform:rotate(-90deg)}
-      .musa-twitch-tool--hover{visibility:hidden}
+      .musa-twitch-tool--hover:not([aria-pressed="true"]){visibility:hidden}
       .musa-twitch-live-count{display:inline-flex;align-items:center;gap:.4rem;padding:0 .4rem;
         color:var(--color-text-alt-2,#adadb8);font-size:1.2rem;font-weight:600;font-variant-numeric:tabular-nums}
       .musa-twitch-live-count[hidden]{display:none}
@@ -192,6 +193,9 @@ const pins: Module = () => whenRoot(() => {
       const rank = new Map(pins.map((pin, index) => [pin.id, index]));
       const byRank = (a, b) => rank.get(a.user.id) - rank.get(b.user.id);
       const pinned = { streams: take(live, id => rank.has(id)).sort(byRank), offline: take(offline, id => rank.has(id)).sort(byRank) };
+      // Pinned categories go right under the pinned channels, above your folders, in the order you pinned them.
+      // Folders still claim their channels first; pinning only moves the category up.
+      const pinnedGames = [];
       for (const folder of folders) {
         const members = new Set(folder.members);
         groups.push({
@@ -210,10 +214,14 @@ const pins: Module = () => whenRoot(() => {
           byGame.get(key).streams.push(item);
         }
         for (const group of byGame.values()) {
-          if (group.streams.length < MIN_CATEGORY_SIZE) continue;
+          const pinnedGame = options.pinnedCategories.includes(group.key);
+          // A pinned category keeps its folder even with a single live channel.
+          if (!pinnedGame && group.streams.length < MIN_CATEGORY_SIZE) continue;
           for (const item of group.streams) used.add(item.user.id);
-          groups.push(group);
+          (pinnedGame ? pinnedGames : groups).push(group);
         }
+        const gameRank = new Map(options.pinnedCategories.map((key, index) => [key, index]));
+        groups.unshift(...pinnedGames.sort((a, b) => gameRank.get(a.key) - gameRank.get(b.key)));
       }
       const rest = { streams: live.filter(item => !used.has(item?.user?.id)), offline: offline.filter(item => !used.has(item?.user?.id)) };
       // Your folders always show, even when none of their channels are in Twitch's list (Twitch sends about 100
@@ -360,6 +368,7 @@ const pins: Module = () => whenRoot(() => {
       pins = read(STORE, []).filter(pin => pin && typeof pin.id === 'string');
       folders = read(FOLDERS, []).filter(folder => folder && typeof folder.id === 'string' && Array.isArray(folder.members));
       options = { byCategory: false, collapsed: {}, ...read(OPTIONS, {}) };
+      if (!Array.isArray(options.pinnedCategories)) options.pinnedCategories = [];
     }
 
     function rerender() {
@@ -569,6 +578,15 @@ const pins: Module = () => whenRoot(() => {
           more.setAttribute('aria-haspopup', 'menu');
           tools.appendChild(more);
         }
+        if (group.kind === 'category') {
+          // Shows on hover, and stays lit once pinned.
+          const pin = tool('pin', `Pin ${group.title}`, () => change(() => {
+            const list = options.pinnedCategories;
+            options.pinnedCategories = list.includes(group.key) ? list.filter(key => key !== group.key) : [...list, group.key];
+          }));
+          pin.classList.add('musa-twitch-tool--hover');
+          tools.appendChild(pin);
+        }
         // Twitch's red live dot and a count, beside the arrow, so a collapsed group still says who is live.
         const live = document.createElement('span');
         live.className = 'musa-twitch-live-count';
@@ -608,6 +626,16 @@ const pins: Module = () => whenRoot(() => {
           const label = `${count} live ${count === 1 ? 'channel' : 'channels'}`;
           live.title = label;
           live.setAttribute('aria-label', label);
+        }
+      }
+      const pin = tools.querySelector('.musa-twitch-tool--pin');
+      if (pin) {
+        const pinnedGame = options.pinnedCategories.includes(group.key);
+        if (pin.getAttribute('aria-pressed') !== String(pinnedGame)) {
+          pin.setAttribute('aria-pressed', String(pinnedGame));
+          const label = `${pinnedGame ? 'Unpin' : 'Pin'} ${group.title}`;
+          pin.setAttribute('aria-label', label);
+          pin.title = label;
         }
       }
       const chevron = tools.querySelector('.musa-twitch-tool--chevron');
