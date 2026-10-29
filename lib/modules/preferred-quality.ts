@@ -1,4 +1,5 @@
 import type { Module } from '../modules';
+import { isHidden, onVisibilityChange } from '../visibility';
 
 // Nudges Twitch's player to start at a preferred quality while leaving Auto in charge.
 // Auto remains in charge of throughput, buffering and device constraints.
@@ -94,12 +95,10 @@ const preferredQuality: Module = (options) => {
   }, true);
 
   // A stream left open in a background tab drops to the lowest quality and comes back up when the tab is shown.
-  // It keeps playing, so Twitch still counts the minutes watched. Ad blocking (vaft) makes document.hidden and
-  // visibilityState always say visible and swallows visibilitychange at document, so read Chrome's own getter
-  // on Document.prototype and listen on window, which the event reaches first while capturing.
+  // It keeps playing, so Twitch still counts the minutes watched. Visibility comes from lib/visibility.ts, which
+  // sees through ad blocking's always-visible fake.
   let background = false;
   if (BACKGROUND_DELAY !== null) {
-    const visibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState')?.get;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const setBackground = (value: boolean) => {
       background = value; status.background = value ? 'active' : 'visible';
@@ -107,12 +106,12 @@ const preferredQuality: Module = (options) => {
     };
     const update = () => {
       clearTimeout(timer);
-      if (visibility?.call(document) === 'hidden') {
+      if (isHidden()) {
         if (!background) { status.background = 'waiting'; timer = setTimeout(() => setBackground(true), BACKGROUND_DELAY); }
       } else if (background) setBackground(false);
       else status.background = 'visible';
     };
-    window.addEventListener('visibilitychange', update, true);
+    onVisibilityChange(update);
     // A stream opened straight into a background tab.
     update();
   }

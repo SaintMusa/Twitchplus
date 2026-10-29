@@ -3,6 +3,7 @@
 // Network: logs.zonian.dev (archived lines), anonymous Twitch IRC (live lines), emote APIs (7TV, BTTV, FFZ),
 // api.ivr.fi, and api.twitch.tv, which gets the viewer's own Twitch token for chat badges.
 import type { Module } from '../modules';
+import { isHidden, onVisibilityChange } from '../visibility';
 
 declare global {
   interface Window {
@@ -2808,8 +2809,8 @@ const viewerLogs: Module = () => {
         };
 
         // Start/stop based on page visibility
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
+        onVisibilityChange(() => {
+            if (isHidden()) {
                 stopInterval();
             } else {
                 startInterval();
@@ -2842,7 +2843,7 @@ const viewerLogs: Module = () => {
         });
 
         // Start interval if page is currently visible
-        if (!document.hidden) {
+        if (!isHidden()) {
             startInterval();
         }
     }

@@ -2,6 +2,7 @@
 // Adds a stream latency badge and a button to jump to the live edge.
 import type { Module } from '../modules';
 import { listen, whenRoot } from '../page-observer';
+import { isHidden, onVisibilityChange } from '../visibility';
 
 // Starts once <html> exists.
 const latency: Module = () => whenRoot(() => {
@@ -216,7 +217,8 @@ const latency: Module = () => whenRoot(() => {
         const root = badge.closest(PLAYER);
         if (root && !mounts.has(badge)) mounts.set(badge, mount(badge, root));
       }
-      update();
+      // Chat keeps changing the page in a background tab too; the readout is redrawn once the tab is shown.
+      if (!isHidden()) update();
     }
 
     function schedule() {
@@ -226,8 +228,8 @@ const latency: Module = () => whenRoot(() => {
     }
     listen(batch => { if (batch.childList) schedule(); });
     // A background tab shows nothing, so the readout only ticks while the tab is visible.
-    setInterval(() => { if (mounts.size && !document.hidden) update(); }, 1000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && mounts.size) update(); });
+    setInterval(() => { if (mounts.size && !isHidden()) update(); }, 1000);
+    onVisibilityChange(() => { if (!isHidden() && mounts.size) update(); });
     scan();
 });
 
