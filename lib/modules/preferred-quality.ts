@@ -2,7 +2,7 @@ import type { Module } from '../modules';
 
 // Nudges Twitch's player to start at a preferred quality while leaving Auto in charge.
 // Auto remains in charge of throughput, buffering and device constraints.
-// This is a startup hint, not a sustained minimum-quality guarantee.
+// Auto aims for the ceiling whatever the player's size, but this is not a minimum-quality guarantee.
 
 declare global {
   interface Window {
@@ -56,11 +56,12 @@ const preferredQuality: Module = (options) => {
     state: 'starting',
     preference: PREFERRED_HEIGHT === Infinity ? 'source' : `${PREFERRED_HEIGHT}p${PREFERRED_FPS}`,
     matched: [], executed: [], selected: null, decisions: 0, manual: false,
-    players: 0, startupHints: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE,
+    players: 0, startupHints: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE, viewport: null,
     compatibility: {},
   });
   let path = location.pathname;
   const players = new Set<Player>();
+  const lifted = new WeakSet<object>();
   const snapshots = new WeakMap<Player, () => unknown>();
   // Read only summaries: never expose load URLs, auth arguments or player objects.
   window.__twitchPreferredQualityReport = () => ({
@@ -110,6 +111,7 @@ const preferredQuality: Module = (options) => {
     let applying = false;
     let capKey: string | null = null;
     let lastCap: unknown = null;
+    let capSize: { width: number; height: number } | null = null;
     let loads = 0;
     let lastPath = location.pathname;
     function summary(q: Quality) {
@@ -135,7 +137,8 @@ const preferredQuality: Module = (options) => {
       try {
         const quality = choose(Array.isArray(qualities) ? qualities : originalQualities.call(player));
         if (quality) {
-          const key = JSON.stringify([quality.group, quality.name, quality.height, quality.framerate, quality.bitrate]);
+          capSize = { width: Number(quality.width) || 0, height: Number(quality.height) || 0 };
+          const key =JSON.stringify([quality.group, quality.name, quality.height, quality.framerate, quality.bitrate]);
           if (key === capKey) return;
           player.setAutoMaxQuality(quality);
           capKey = key; lastCap = summary(quality);
@@ -145,6 +148,22 @@ const preferredQuality: Module = (options) => {
       } catch { status.state = 'quality-cap-failed'; }
       finally { applying = false; }
     }
+    // On every time update the core reports the video element's on-screen size (times devicePixelRatio), and
+    // Auto never picks a quality larger than that, so a player beside chat stays at 720p however fast the
+    // connection is. Report at least the ceiling quality's own size; below it Auto still follows bandwidth.
+    function liftViewport() {
+      // Twitch's wrapper holds the IVS player as playerInstance; the IVS player holds the core.
+      const core = player.core ?? player.playerInstance?.core;
+      if (!core) { status.viewport = 'no-core'; return; }
+      if (lifted.has(core)) return;
+      if (typeof core.setAutoViewportSize !== 'function') { status.viewport = 'unsupported'; return; }
+      const originalViewport = core.setAutoViewportSize;
+      core.setAutoViewportSize = function (this: unknown, width: number, height: number) {
+        if (capSize && prefer()) { width = Math.max(width, capSize.width); height = Math.max(height, capSize.height); }
+        return originalViewport.call(this, width, height);
+      };
+      lifted.add(core); status.viewport = 'lifted';
+    }
     // Twitch can reuse the player without emitting the initial qualities event.
     // Its normal quality-list reads also refresh the ceiling for the new stream.
     player.getQualities = function (this: Player, ...args: unknown[]) {
@@ -153,12 +172,12 @@ const preferredQuality: Module = (options) => {
       return qualities;
     };
     player.load = function (this: Player, ...args: unknown[]) {
-      loads++; lastPath = location.pathname; capKey = null; lastCap = null;
+      loads++; lastPath = location.pathname; capKey = null; lastCap = null; capSize = null;
       seeded = false; hint();
       const result = originalLoad.apply(this, args);
       // load may reset engine configuration; supply the hint again afterwards.
       // Do not use the previous stream's quality list here.
-      hint();
+      hint(); liftViewport();
       return result;
     };
     player.addEventListener('PlayerInitialized', () => { if (!seeded) hint(); });
@@ -169,7 +188,7 @@ const preferredQuality: Module = (options) => {
       return originalDelete.apply(this, args);
     };
     players.add(player); status.players++;
-    hint(); cap();
+    hint(); cap(); liftViewport();
     // Never call setQuality: that would turn off native adaptation.
   }
 

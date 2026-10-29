@@ -41,7 +41,7 @@ export const SECTIONS: Section[] = [
       {
         id: 'quality',
         label: 'Preferred quality',
-        description: 'Keeps Auto quality, but starts high and never goes above your ceiling.',
+        description: 'Keeps Auto quality but aims for your ceiling, even in a small player. Auto still drops lower on a slow connection.',
         default: true,
         options: [
           {

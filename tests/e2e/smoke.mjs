@@ -131,7 +131,9 @@ const report = await page.evaluate(() => {
     // Sliders in the player: volume always; Rewind's DVR seek bar too when it is working.
     playerSliders: [...document.querySelectorAll('[data-a-target="video-player"] [role="slider"], [data-a-target="video-player"] input[type="range"]')]
       .map((e) => e.getAttribute('aria-label') || e.getAttribute('data-a-target') || e.className.toString().slice(0, 40)),
-    quality: q && { state: q.state, matched: q.matched, ceiling: q.activePlayers?.map((p) => p.ceiling?.name).filter(Boolean) },
+    quality: q && { state: q.state, matched: q.matched, viewport: q.viewport, ceiling: q.activePlayers?.map((p) => p.ceiling?.name).filter(Boolean),
+      current: q.activePlayers?.map((p) => p.current?.name).filter(Boolean),
+      playerSize: safe(() => { const v = document.querySelector('video'); return `${v.clientWidth}x${v.clientHeight}`; }) },
     latency: safe(() => window.__twitchNativeLatencyReport?.()),
     screenshot: safe(() => window.__twitchNativeScreenshotReport?.()),
     pins: safe(() => window.__twitchNativePinsReport?.()),
