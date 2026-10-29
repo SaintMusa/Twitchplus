@@ -25,6 +25,9 @@ const CEILINGS: Record<string, { height: number; bitrate: number }> = {
   '480': { height: 480, bitrate: 1_500_000 },
 };
 const PREFERRED_FPS = 60;
+/** Background choice from the popup -> how long a tab stays hidden before it drops to the lowest quality, so a
+ *  quick tab switch does not; null keeps the quality. */
+const BACKGROUND_DELAYS: Record<string, number | null> = { off: null, '0': 0, '30': 30_000, '120': 120_000, '600': 600_000 };
 
 // The two modules are found by content: IDs change between builds, so fixed IDs stop matching.
 type Role = 'settings' | 'creator';
@@ -51,16 +54,21 @@ export const roleOf = (source: string): Role | null =>
 
 const preferredQuality: Module = (options) => {
   const { height: PREFERRED_HEIGHT, bitrate: INITIAL_BITRATE } = CEILINGS[String(options.ceiling)] ?? CEILINGS['1080']!;
+  // Not `??`: null is the "keep quality" choice, and only a missing or unknown value falls back to 30 seconds.
+  const backgroundChoice = BACKGROUND_DELAYS[String(options.background)];
+  const BACKGROUND_DELAY = backgroundChoice === undefined ? 30_000 : backgroundChoice;
   if (window.__twitchPreferredQuality) return;
   const status: Record<string, any> = (window.__twitchPreferredQuality = {
     state: 'starting',
     preference: PREFERRED_HEIGHT === Infinity ? 'source' : `${PREFERRED_HEIGHT}p${PREFERRED_FPS}`,
     matched: [], executed: [], selected: null, decisions: 0, manual: false,
     players: 0, startupHints: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE, viewport: null,
+    background: BACKGROUND_DELAY === null ? 'off' : 'visible', backgroundDelay: BACKGROUND_DELAY,
     compatibility: {},
   });
   let path = location.pathname;
   const players = new Set<Player>();
+  const recaps = new Map<Player, () => void>();
   const lifted = new WeakSet<object>();
   const snapshots = new WeakMap<Player, () => unknown>();
   // Read only summaries: never expose load URLs, auth arguments or player objects.
@@ -85,7 +93,31 @@ const preferredQuality: Module = (options) => {
     }
   }, true);
 
-  function choose(qualities: unknown) {
+  // A stream left open in a background tab drops to the lowest quality and comes back up when the tab is shown.
+  // It keeps playing, so Twitch still counts the minutes watched. Ad blocking (vaft) makes document.hidden and
+  // visibilityState always say visible and swallows visibilitychange at document, so read Chrome's own getter
+  // on Document.prototype and listen on window, which the event reaches first while capturing.
+  let background = false;
+  if (BACKGROUND_DELAY !== null) {
+    const visibility = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState')?.get;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const setBackground = (value: boolean) => {
+      background = value; status.background = value ? 'active' : 'visible';
+      for (const recap of recaps.values()) recap();
+    };
+    const update = () => {
+      clearTimeout(timer);
+      if (visibility?.call(document) === 'hidden') {
+        if (!background) { status.background = 'waiting'; timer = setTimeout(() => setBackground(true), BACKGROUND_DELAY); }
+      } else if (background) setBackground(false);
+      else status.background = 'visible';
+    };
+    window.addEventListener('visibilitychange', update, true);
+    // A stream opened straight into a background tab.
+    update();
+  }
+
+  function choose(qualities: unknown, maxHeight = PREFERRED_HEIGHT) {
     const scored = (Array.isArray(qualities) ? qualities : []).map((q: Quality) => {
       if (!q || /audio|^auto$/i.test(String(q.group || ''))) return null;
       const label = [q.group, q.quality, q.name].join(' ');
@@ -95,7 +127,7 @@ const preferredQuality: Module = (options) => {
       return height > 0 ? { q, height, fps, bitrate: Number(q.bitrate) || 0 } : null;
     }).filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => b.height - a.height || b.fps - a.fps || b.bitrate - a.bitrate);
-    const allowed = scored.filter((q) => q.height <= PREFERRED_HEIGHT && q.fps <= PREFERRED_FPS);
+    const allowed = scored.filter((q) => q.height <= maxHeight && q.fps <= PREFERRED_FPS);
     // If every available video exceeds the cap, choose the smallest video.
     return (allowed[0] || scored[scored.length - 1])?.q || null;
   }
@@ -135,7 +167,8 @@ const preferredQuality: Module = (options) => {
       if (!prefer() || applying) return;
       applying = true;
       try {
-        const quality = choose(Array.isArray(qualities) ? qualities : originalQualities.call(player));
+        // A height of 0 allows nothing, so the smallest video is chosen.
+        const quality = choose(Array.isArray(qualities) ? qualities : originalQualities.call(player), background ? 0 : PREFERRED_HEIGHT);
         if (quality) {
           capSize = { width: Number(quality.width) || 0, height: Number(quality.height) || 0 };
           const key =JSON.stringify([quality.group, quality.name, quality.height, quality.framerate, quality.bitrate]);
@@ -184,10 +217,11 @@ const preferredQuality: Module = (options) => {
     player.addEventListener('PlayerQualitiesChanged', () => cap());
     player.addEventListener('PlayerSourceGroupChanged', () => { capKey = null; cap(); });
     if (typeof originalDelete === 'function') player.delete = function (this: Player, ...args: unknown[]) {
-      players.delete(player);
+      players.delete(player); recaps.delete(player);
       return originalDelete.apply(this, args);
     };
     players.add(player); status.players++;
+    recaps.set(player, () => cap());
     hint(); cap(); liftViewport();
     // Never call setQuality: that would turn off native adaptation.
   }

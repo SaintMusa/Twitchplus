@@ -56,6 +56,19 @@ export const SECTIONS: Section[] = [
               { value: '480', label: '480p' },
             ],
           },
+          {
+            kind: 'select',
+            id: 'background',
+            label: 'In background tabs',
+            default: '30',
+            choices: [
+              { value: 'off', label: 'Keep quality' },
+              { value: '0', label: 'Lowest right away' },
+              { value: '30', label: 'Lowest after 30 seconds' },
+              { value: '120', label: 'Lowest after 2 minutes' },
+              { value: '600', label: 'Lowest after 10 minutes' },
+            ],
+          },
         ],
       },
       {
