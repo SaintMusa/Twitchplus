@@ -119,6 +119,11 @@ if (videoBox) {
 if (args['open-viewer-card']) {
   const name = page.locator('[data-a-target="chat-message-username"]').first();
   await name.click({ timeout: 10_000 }).catch((e) => problems.push(`test: could not open a viewer card: ${e.message}`));
+  // Viewer logs builds its panel on the first click of Chat Logs.
+  if (settings.viewerLogs) {
+    await page.locator('.enhancer-chatlogs-toggle-button').click({ timeout: 10_000 })
+      .catch((e) => problems.push(`test: no Chat Logs button: ${e.message}`));
+  }
   await page.waitForTimeout(8000);
 }
 
@@ -144,6 +149,10 @@ const report = await page.evaluate(() => {
       toolbar: document.querySelectorAll('.chatlogs-toolbar').length,
       messages: document.querySelectorAll('.chatlogs-message').length,
       loading: document.querySelectorAll('.chatlogs-loading').length,
+      badges: document.querySelectorAll('.chatlogs-badge').length,
+      emotes: document.querySelectorAll('.chatlogs-emote').length,
+      status: document.querySelector('.chatlogs-status')?.textContent,
+      accountCreated: document.querySelector('.enhancer-account-created')?.textContent?.trim(),
     },
     adBlock: { vaftVersion: window.twitchAdSolutionsVersion, supportApi: typeof window.vaftSupport, workerHooked: !/\[native code\]/.test(String(window.Worker)) },
     videoPlaying: !!document.querySelector('video') && !document.querySelector('video').paused,
