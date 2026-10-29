@@ -267,6 +267,9 @@ const rewind: Module = () => {
     if (params.length === 1 && paramUsing(source, params, 'isParticipatingDJ') === 0 &&
         paramUsing(source, params, 'isAffiliate') === 0 && paramUsing(source, params, 'isPartner') === 0 &&
         /(["'])dj\1/.test(source) && /(["'])not-enabled\1/.test(source)) return { role: 'availabilityReason' };
+    // Newer builds also export a savvy-part-2 check for DJs and affiliates. It reads isAffiliate like the
+    // channel check does, so tell it apart by isParticipatingDJ; it belongs to the native variant, kept as is.
+    if (params.length === 1 && paramUsing(source, params, 'isParticipatingDJ') === 0) return { role: 'djVariant' };
     if (params.length === 1 && paramUsing(source, params, 'isAffiliate') === 0) return { role: 'channel' };
     if (params.length === 0) {
       const experiments = experimentGate(source, bindings);
@@ -279,7 +282,7 @@ const rewind: Module = () => {
   }
   function counted(name) { if (debug) status.calls[name] = (status.calls[name] || 0) + 1; }
   function override(name, info, original) {
-    if (info.role === 'availabilityReason' || info.role === 'nativeVariant') return original;
+    if (info.role === 'availabilityReason' || info.role === 'nativeVariant' || info.role === 'djVariant') return original;
     if (info.role === 'flag') return function () { counted(name); return true; };
     if (info.role === 'channel') return function (channel) {
       counted(name);
@@ -314,7 +317,7 @@ const rewind: Module = () => {
     // Native rollout exports stay untouched, so any number is safe (some builds export two).
     if (count('eligibility') !== 1 || count('channel') !== 1 || count('flag') < 2 ||
         !flagExperiments.includes('savvy-part-1') || !flagExperiments.includes('savvy-part-1-flag') ||
-        count('availabilityReason') > 1) return null;
+        count('availabilityReason') > 1 || count('djVariant') > 1) return null;
     status.roles = roles;
     return plan;
   }
