@@ -297,6 +297,9 @@ const pins: Module = () => whenRoot(() => {
       if (hooked.has(node)) return;
       hooked.add(node);
       const render = node.render;
+      // Another extension may have wrapped render already, tied to this component, so copies with other props would
+      // all draw the full list. Groups use Twitch's own; the wrapper still runs once per render.
+      const twitchRender = Object.getPrototypeOf(node).render ?? render;
       node.render = function (...args) {
         try {
           const section = this.props.section;
@@ -309,7 +312,7 @@ const pins: Module = () => whenRoot(() => {
           const view = (key, props, lists) => {
             const copy = Object.create(this);
             Object.defineProperty(copy, 'props', { value: { ...this.props, ...props, section: { ...section, ...lists } } });
-            const element = render.apply(copy, args);
+            const element = twitchRender.apply(copy, args);
             elementShape ??= element;
             return { ...element, key: `musa-${key}` };
           };
@@ -317,7 +320,8 @@ const pins: Module = () => whenRoot(() => {
           // right, but draws only the pinned live ones, first; an unreachable initial amount keeps "Show more" away.
           // Pinned offline channels do not stay on top: they lead the offline part of the list further down, the
           // way Twitch always puts offline channels after live ones.
-          elementShape ??= render.apply(this, args);
+          const element = render.apply(this, args);
+          elementShape ??= element;
           const live = section.streams || [];
           const elements = [view('followed', {
             OnlineChannelRenderer: onlyPinned(this.props.OnlineChannelRenderer),

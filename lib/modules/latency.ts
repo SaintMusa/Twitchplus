@@ -1,4 +1,26 @@
 // @ts-nocheck
+/*! @license MIT
+ * Based on the stream latency module of Enhancer, https://github.com/enhancer-app/enhancer
+ * Copyright (c) 2024 igorovh
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 // Adds a stream latency badge and a button to jump to the live edge.
 import type { Module } from '../modules';
 import { listen, whenRoot } from '../page-observer';
@@ -15,11 +37,10 @@ const latency: Module = () => whenRoot(() => {
     const mounts = new Map();
     const status = { refreshes: 0, lastLatency: null, lastError: null };
     let scheduled = false;
-    let refreshing = false;
 
     window.__twitchNativeLatencyReport = () => ({
       mountedButtons: [...mounts.values()].filter(ui => ui.host.isConnected).length,
-      refreshing, refreshes: status.refreshes, lastLatency: status.lastLatency, lastError: status.lastError,
+      refreshes: status.refreshes, lastLatency: status.lastLatency, lastError: status.lastError,
     });
 
     const style = document.createElement('style');
@@ -36,9 +57,8 @@ const latency: Module = () => whenRoot(() => {
         background:rgba(0,0,0,.6);color:#fff;cursor:pointer;flex:none;appearance:none;
         font-family:inherit;font-size:1.2rem;font-weight:600;line-height:1.68rem;white-space:nowrap;
         font-variant-numeric:tabular-nums}
-      ${BUTTON}:hover:not(:disabled){background:rgba(0,0,0,.8)}
+      ${BUTTON}:hover{background:rgba(0,0,0,.8)}
       ${BUTTON}:focus-visible{outline:2px solid var(--color-border-interactable-focus,#a970ff);outline-offset:2px}
-      ${BUTTON}:disabled{opacity:.7;cursor:default}
       .musa-twitch-latency-rate{opacity:.65}
       .musa-twitch-latency-rate:empty{display:none}
       .musa-twitch-latency-tooltip{position:absolute;right:0;top:calc(100% + .6rem);
@@ -112,13 +132,11 @@ const latency: Module = () => whenRoot(() => {
     function render(ui, state) {
       if (!ui.host.isConnected) return;
       ui.host.hidden = !state.live;
-      ui.button.disabled = refreshing;
-      const text = refreshing ? 'Refreshing…' : state.latency == null ? '—' : `${state.latency.toFixed(2)}s`;
+      const text = state.latency == null ? '—' : `${state.latency.toFixed(2)}s`;
       if (ui.value.textContent !== text) ui.value.textContent = text;
-      const rate = !refreshing && Math.abs(state.rate - 1) > 0.005 ? `(${state.rate.toFixed(2)}x)` : '';
+      const rate = Math.abs(state.rate - 1) > 0.005 ? `(${state.rate.toFixed(2)}x)` : '';
       if (ui.rate.textContent !== rate) ui.rate.textContent = rate;
-      const label = refreshing ? 'Refreshing player…'
-        : `Stream delay ${state.latency == null ? 'unknown' : `${state.latency.toFixed(2)} seconds`}. Click to refresh player.`;
+      const label = `Stream delay ${state.latency == null ? 'unknown' : `${state.latency.toFixed(2)} seconds`}. Click to refresh player.`;
       if (ui.button.getAttribute('aria-label') !== label) ui.button.setAttribute('aria-label', label);
     }
 
@@ -136,36 +154,20 @@ const latency: Module = () => whenRoot(() => {
       ui.noticeTimer = setTimeout(() => { ui.notice.hidden = true; }, 3500);
     }
 
-    async function refresh(ui) {
-      if (refreshing) return;
-      const { player, live } = snapshot();
-      let path;
-      try { path = player?.getPath?.(); } catch {}
-      if (!live || !path) { status.lastError = 'player-unavailable'; notify(ui, 'Couldn’t find the player. Reload the page.'); return; }
-      refreshing = true;
+    function refresh(ui) {
+      const { player, live, latency } = snapshot();
+      if (!live) { status.lastError = 'player-unavailable'; notify(ui, 'Couldn’t find the player. Reload the page.'); return; }
+      if (latency == null) { status.lastError = 'latency-unknown'; return; }
       status.lastError = null;
-      update();
       try {
-        // Reloading the current source rebuilds the stream buffer and rejoins at the live edge.
-        player.load(path);
-        player.play();
-        const started = performance.now();
-        while (performance.now() - started < 10000) {
-          await new Promise(resolve => setTimeout(resolve, 250));
-          const current = mediaPlayer(playerProps());
-          if (current?.getState?.() === 'Playing' && !current.isPaused?.()) {
-            status.refreshes++;
-            return;
-          }
-        }
-        throw new Error('refresh-timeout');
-      } catch (error) {
-        status.lastError = error?.message === 'refresh-timeout' ? 'refresh-timeout' : 'refresh-failed';
+        // Skips ahead by the delay inside the current stream, so nothing reloads and the picture keeps playing.
+        player.seekTo(player.getPosition() + latency);
+        status.refreshes++;
+      } catch {
+        status.lastError = 'refresh-failed';
         notify(ui, 'Couldn’t refresh the player. Reload the page.');
-      } finally {
-        refreshing = false;
-        update();
       }
+      update();
     }
 
     function mount(badge, root) {
@@ -194,7 +196,7 @@ const latency: Module = () => whenRoot(() => {
       button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        void refresh(ui);
+        refresh(ui);
       });
       badge.after(host);
       root.appendChild(notice);

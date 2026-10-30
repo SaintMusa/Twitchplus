@@ -72,6 +72,8 @@ Some features are built on other people's work:
   with credit to its contributors and to the projects it credits in turn. Its licence notice is kept in `lib/modules/vaft-*.ts`.
 - **Watch sub-only VODs** is based on [besuper/TwitchNoSub](https://github.com/besuper/TwitchNoSub) (Apache-2.0).
   See the header of `lib/modules/sub-only-vods.ts` for the licence notice and what was changed.
+- **Stream delay button** is based on [Enhancer](https://github.com/enhancer-app/enhancer) (MIT). Its licence notice is
+  kept in `lib/modules/latency.ts`.
 - **Link preview cards** use [Chatterino](https://chatterino.com)'s public link resolver.
 - **Chat logs on viewer cards** read from [logs.zonian.dev](https://logs.zonian.dev).
 

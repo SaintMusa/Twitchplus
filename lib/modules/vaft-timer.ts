@@ -70,6 +70,7 @@ const vaftTimer: Module = () => {
         scope.AdSegmentCache = new Map();
         scope.ForceSuppressClientAds = true;// Sets SUPPRESS="true" in the master playlist, the flag Twitch's page checks before running client-side ads
         scope.BackupPlayerTypeCooldown = 10000;// After a backup player type serves ads, skip it for this long (in milliseconds) instead of re-requesting it every playlist refresh
+        scope.AdOverLiveSegments = 3;// How many live segments must end a playlist before its finished ads count as over (so a gap between two ads doesn't end the break)
         scope.AccessTokenCache = new Map();// channel + player type -> { token, expires }
         scope.GqlRequestTimeout = 8000;// Give up on a GQL request relayed through the page after this long (in milliseconds)
         scope.ShortCircuitAdGqlRequests = true;// Answer Twitch's client-side ad GQL queries (VideoAdRequestDecline, FetchAdsService_FetchAds) locally with "no ad"
@@ -152,6 +153,8 @@ const vaftTimer: Module = () => {
                     ${getPlaylistHeadTime.toString()}
                     ${stripMafAds.toString()}
                     ${getAdPodInfo.toString()}
+                    ${endsWithLiveSegments.toString()}
+                    ${dropEndedAdSegments.toString()}
                     ${cleanServedPlaylist.toString()}
                     ${forceSuppressClientAds.toString()}
                     ${getVideoSessionId.toString()}
@@ -598,8 +601,34 @@ const vaftTimer: Module = () => {
         return {
             podPosition: ad.position + 1,
             podLength: Math.max(ad.length, ad.position + 1),
-            endTime: Date.now() + remaining
+            endTime: Date.now() + remaining,
+            allEnded: ads.every(x => x.start + x.duration <= now)
         };
+    }
+    function endsWithLiveSegments(textStr) {
+        const segments = textStr.split('\n').filter(line => line.startsWith('#EXTINF'));
+        return segments.length >= AdOverLiveSegments && segments.slice(-AdOverLiveSegments).every(line => line.includes(',live'));
+    }
+    function dropEndedAdSegments(textStr) {
+        // Takes a finished ad off the front of the playlist, which is what Twitch's own playlist does about 30 seconds later
+        const lines = [];
+        let segmentTags = [];
+        let dropped = 0;
+        const source = textStr.replaceAll('\r', '').split('\n');
+        for (let i = 0; i < source.length; i++) {
+            const line = source[i];
+            if (line.startsWith('#EXT-X-PROGRAM-DATE-TIME:') || line === '#EXT-X-DISCONTINUITY') {
+                segmentTags.push(line);
+            } else if (line.startsWith('#EXTINF') && !line.includes(',live')) {
+                segmentTags = [];
+                dropped++;
+                i++;// The segment's url
+            } else {
+                lines.push(...segmentTags, line);
+                segmentTags = [];
+            }
+        }
+        return lines.join('\n').replace(/^#EXT-X-MEDIA-SEQUENCE:(\d+)$/m, (match, sequence) => `#EXT-X-MEDIA-SEQUENCE:${Number(sequence) + dropped}`);
     }
     function cleanServedPlaylist(textStr, streamInfo) {
         // Runs on the playlist handed to the player during an ad:
@@ -690,11 +719,15 @@ const vaftTimer: Module = () => {
             streamInfo.LastPlayerReload = Date.now();
         }
         textStr = stripMafAds(textStr, streamInfo);
-        const haveAdTags = textStr.includes(AdSignifier);
+        const adPodInfo = textStr.includes(AdSignifier) ? getAdPodInfo(textStr) : null;
+        // An ad's tags and segments stay in the playlist until 15 live segments follow it (about 30 seconds), so the
+        // tags alone would keep the backup stream on long after the ad ended
+        const adsAreOver = !!adPodInfo?.allEnded && endsWithLiveSegments(textStr);
+        const haveAdTags = textStr.includes(AdSignifier) && !adsAreOver;
         if (haveAdTags) {
             streamInfo.IsMidroll = textStr.includes('"MIDROLL"') || textStr.includes('"midroll"');
             // Keep the last known info when a playlist has no ad tags of its own (e.g. between two ads of a pod)
-            streamInfo.AdPodInfo = getAdPodInfo(textStr) || streamInfo.AdPodInfo;
+            streamInfo.AdPodInfo = adPodInfo || streamInfo.AdPodInfo;
             if (!streamInfo.IsShowingAd) {
                 streamInfo.IsShowingAd = true;
                 postMessage({
@@ -850,6 +883,9 @@ const vaftTimer: Module = () => {
                     key: 'PauseResumePlayer'
                 });
             }
+        }
+        if (adsAreOver) {
+            textStr = dropEndedAdSegments(cleanServedPlaylist(textStr, streamInfo));
         }
         const bannerData = {
             key: 'UpdateAdBlockBanner',
@@ -1089,8 +1125,7 @@ const vaftTimer: Module = () => {
                 if (adBlockDiv.P.textContent !== text) {
                     adBlockDiv.P.textContent = text;
                 }
-                // An ad's tags stay in the playlist until 15 live segments follow it (about 30 seconds), and the worker
-                // only reports the end after that, so the countdown is what knows the ad is over
+                // The worker reports the end once live segments follow the ad, a few seconds after the countdown knows
                 if (adEndTime <= Date.now()) {
                     clearInterval(adBlockDiv.CountdownTimer);
                     adBlockDiv.CountdownTimer = null;
