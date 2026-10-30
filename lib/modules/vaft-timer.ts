@@ -1061,6 +1061,7 @@ const vaftTimer: Module = () => {
                 playerRootDiv.appendChild(adBlockDiv);
             }
             const isVisible = data.hasAds && playerBufferState.isLive;
+            const adEndTime = data.mafAdInfo?.endTime ?? data.adPodInfo?.endTime;
             const formatTimeLeft = function(endTime) {
                 const secondsLeft = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
                 return ` · ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
@@ -1088,11 +1089,18 @@ const vaftTimer: Module = () => {
                 if (adBlockDiv.P.textContent !== text) {
                     adBlockDiv.P.textContent = text;
                 }
+                // An ad's tags stay in the playlist until 15 live segments follow it (about 30 seconds), and the worker
+                // only reports the end after that, so the countdown is what knows the ad is over
+                if (adEndTime <= Date.now()) {
+                    clearInterval(adBlockDiv.CountdownTimer);
+                    adBlockDiv.CountdownTimer = null;
+                    adBlockDiv.style.display = 'none';
+                }
             };
-            renderText();
             clearInterval(adBlockDiv.CountdownTimer);
             adBlockDiv.CountdownTimer = isVisible && (data.adPodInfo || data.mafAdInfo) ? setInterval(renderText, 1000) : null;
             adBlockDiv.style.display = isVisible ? 'block' : 'none';
+            renderText();
         }
     }
     function getPlayerAndState() {
