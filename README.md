@@ -1,31 +1,28 @@
 # Twitch Plus
 
-A browser extension (Chrome and Firefox) that adds features to Twitch which look and behave like Twitch's own.
-Each feature can be turned on or off, by section, in the extension's popup.
+A browser extension for Chrome and Firefox that adds features to Twitch, made to look and feel like part of the site.
+You can turn each feature on or off in the extension's popup.
 
 This is a personal project, built for my own use and shared as it is. It is not affiliated with or endorsed by Twitch,
 and I make no promises about support or updates. Issues and pull requests are welcome, but I may not get to them.
 
-**AI disclosure:** this project was built with a lot of help from AI (Claude, by Anthropic). The AI wrote and edited
-much of the code, and I directed it and tested the features myself. If that is a dealbreaker for you, now you know.
+Built with a lot of help from AI (Claude).
 
-| Section | Feature |
-|---|---|
-| Player | Live rewind seek bar |
-| Player | Preferred quality |
-| Player | Live delay on the LIVE badge |
-| Player | Screenshot button |
-| Player | Watch sub-only VODs |
-| Chat | Chat and search hotkeys (`/` and `?`) |
-| Chat | Keep chat paused while hovering |
-| Chat | Link preview cards (asks for access to all sites when switched on) |
-| Chat | Chat logs on viewer cards |
-| Sidebar | Pins and folders; offline channels sorted by when they last went live |
-| Ads | Block ads (vaft, Support or Timer version) |
+## What it does
+
+- **Player:** rewind live streams, hold your preferred quality, lower it in background tabs, see your stream delay,
+  take screenshots and watch sub-only VODs.
+- **Chat:** jump to chat with `/` and search with `?`, keep chat paused while your mouse is over it, preview links, and
+  see a viewer's earlier messages on their card (Twitch's card, and 7TV's card when 7TV is installed).
+- **Sidebar:** pin channels, sort them into folders, and see offline channels by when they last went live.
+- **Ads:** block ads, with two versions to choose from.
+
+Link previews and chat logs stay off until you turn them on, because they use outside services. Link previews also ask
+for access to all sites when you switch them on.
 
 ## Install from source
 
-Needs Node 22 or later.
+You need [Node](https://nodejs.org) 22.12 or later, which is the tool that builds the extension.
 
 ```bash
 npm install
@@ -33,39 +30,35 @@ npm run build            # Chrome: load .output/chrome-mv3 via chrome://extensio
 npm run build:firefox    # Firefox 128+: load .output/firefox-mv3/manifest.json via about:debugging
 ```
 
-`npm run dev` opens a browser with the extension loaded and reloads it on every change.
+`npm run dev` opens a browser with the extension loaded and reloads it whenever the code changes.
 
-## How it is built
+## How it works
 
-- `lib/features.ts` lists every feature by section. The popup, the defaults and the loader are generated from it.
-- `lib/modules/` holds one file per feature. A module runs in Twitch's page context at document start, before
-  Twitch's own scripts, and only when its feature is on.
-- Settings are saved in `storage.sync` by the popup. `entrypoints/bridge.content.ts` copies them into twitch.tv's
-  `localStorage` (`twitchPlus.settings`), because page-context code can't wait for async extension storage.
-- Each module starts inside its own `try/catch`. `__twitchPlus.status` in the console shows which features are on.
+Each feature is one file in `lib/modules/`, and `lib/features.ts` lists them all. The popup and default settings are
+built from that list.
 
-### Adding a feature
+Features run inside the Twitch page before Twitch's own code starts, which lets them change how the site behaves. They
+need your settings straight away, so `entrypoints/bridge.content.ts` copies them into twitch.tv's `localStorage`, a
+small store the page can read instantly. If one feature crashes, the others keep running. To see which features are on,
+type `__twitchPlus.status` in the browser console.
 
-1. Add it to `lib/features.ts`.
-2. Write `lib/modules/<name>.ts`, which exports a function that takes the feature's options.
-3. Register it in `lib/modules.ts`. `npm test` checks that every feature has a module.
+To add a feature, list it in `lib/features.ts`, write `lib/modules/<name>.ts`, and register it in `lib/modules.ts`.
+`npm test` checks that every listed feature has a module.
 
 ## Checks
 
 ```bash
-npm run compile   # type-check
-npm test          # unit tests
-npm run build && npm run test:e2e   # live smoke test on twitch.tv in your installed Chrome
+npm run compile   # check the code for type errors
+npm test          # run the unit tests
+npm run build && npm run test:e2e   # try the build on live Twitch in your installed Chrome
 ```
 
-`test:e2e` opens a live channel signed out, with the built page script injected before Twitch's own scripts as the
-extension does, and prints each feature's status. `--channel=name`, `--settings='{"quality.ceiling":"720"}'`,
-`--headed`, `--screenshot=file.png` and `--no-inject` (plain Twitch, to tell its own errors apart) are options.
+The options for the live test are in `tests/e2e/smoke.mjs`.
 
 ## Privacy
 
-The extension has no server of its own. Features that contact a third-party service say so in the popup and are
-off by default.
+The extension has no server of its own. Features that contact an outside service say so in the popup and are off by
+default.
 
 ## Licence
 
@@ -73,7 +66,7 @@ MIT, see [LICENSE](LICENSE). Code taken from other projects keeps its own licenc
 
 ## Credits
 
-Some features are built on other people's work, and this project would be missing them without it:
+Some features are built on other people's work:
 
 - **Block ads** is based on vaft from [pixeltris/TwitchAdSolutions](https://github.com/pixeltris/TwitchAdSolutions) (MIT),
   with credit to its contributors and to the projects it credits in turn. Its licence notice is kept in `lib/modules/vaft-*.ts`.
