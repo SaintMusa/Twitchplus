@@ -215,6 +215,10 @@ const preferredQuality: Module = (options) => {
     player.addEventListener('PlayerInitialized', () => { if (!seeded) hint(); });
     player.addEventListener('PlayerQualitiesChanged', () => cap());
     player.addEventListener('PlayerSourceGroupChanged', () => { capKey = null; cap(); });
+    // A reload (ad blocking does one after every ad) can drop the ceiling while capKey still says it is set.
+    player.addEventListener('PlayerQualityChanged', () => {
+      if (capSize && Number(player.getQuality?.()?.height) > capSize.height) { capKey = null; cap(); }
+    });
     if (typeof originalDelete === 'function') player.delete = function (this: Player, ...args: unknown[]) {
       players.delete(player); recaps.delete(player);
       return originalDelete.apply(this, args);
