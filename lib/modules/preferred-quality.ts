@@ -29,6 +29,9 @@ const PREFERRED_FPS = 60;
 /** Background choice from the popup -> how long a tab stays hidden before it drops to the lowest quality, so a
  *  quick tab switch does not; null keeps the quality. */
 const BACKGROUND_DELAYS: Record<string, number | null> = { off: null, '0': 0, '30': 30_000, '120': 120_000, '600': 600_000 };
+/** How often, and how many times, a load sends the ceiling again while the stream sits below it. */
+const NUDGE_DELAY = 6_000;
+const NUDGE_ATTEMPTS = 3;
 
 // The two modules are found by content: IDs change between builds, so fixed IDs stop matching.
 type Role = 'settings' | 'creator';
@@ -63,7 +66,7 @@ const preferredQuality: Module = (options) => {
     state: 'starting',
     preference: PREFERRED_HEIGHT === Infinity ? 'source' : `${PREFERRED_HEIGHT}p${PREFERRED_FPS}`,
     matched: [], executed: [], selected: null, decisions: 0, manual: false,
-    players: 0, startupHints: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE, viewport: null,
+    players: 0, startupHints: 0, nudges: 0, mode: 'native-auto', initialBitrate: INITIAL_BITRATE, viewport: null,
     background: BACKGROUND_DELAY === null ? 'off' : 'visible', backgroundDelay: BACKGROUND_DELAY,
     compatibility: {},
   });
@@ -143,6 +146,7 @@ const preferredQuality: Module = (options) => {
     let capKey: string | null = null;
     let lastCap: unknown = null;
     let capSize: { width: number; height: number } | null = null;
+    let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
     let loads = 0;
     let lastPath = location.pathname;
     function summary(q: Quality) {
@@ -180,6 +184,16 @@ const preferredQuality: Module = (options) => {
       } catch { status.state = 'quality-cap-failed'; }
       finally { applying = false; }
     }
+    // After a load Auto can settle below the ceiling with bandwidth to spare and stay there, as it does without
+    // this module. Sending the ceiling again makes it choose again; the choice is still Auto's.
+    function nudge(attempts = NUDGE_ATTEMPTS) {
+      clearTimeout(nudgeTimer);
+      nudgeTimer = setTimeout(() => {
+        if (!capSize || !(Number(player.getQuality?.()?.height) < capSize.height)) return;
+        capKey = null; cap(); status.nudges++;
+        if (attempts > 1) nudge(attempts - 1);
+      }, NUDGE_DELAY);
+    }
     // On every time update the core reports the video element's on-screen size (times devicePixelRatio), and
     // Auto never picks a quality larger than that, so a player beside chat stays at 720p however fast the
     // connection is. Report at least the ceiling quality's own size; below it Auto still follows bandwidth.
@@ -209,7 +223,7 @@ const preferredQuality: Module = (options) => {
       const result = originalLoad.apply(this, args);
       // load may reset engine configuration; supply the hint again afterwards.
       // Do not use the previous stream's quality list here.
-      hint(); liftViewport();
+      hint(); liftViewport(); nudge();
       return result;
     };
     player.addEventListener('PlayerInitialized', () => { if (!seeded) hint(); });
@@ -220,7 +234,7 @@ const preferredQuality: Module = (options) => {
       if (capSize && Number(player.getQuality?.()?.height) > capSize.height) { capKey = null; cap(); }
     });
     if (typeof originalDelete === 'function') player.delete = function (this: Player, ...args: unknown[]) {
-      players.delete(player); recaps.delete(player);
+      players.delete(player); recaps.delete(player); clearTimeout(nudgeTimer);
       return originalDelete.apply(this, args);
     };
     players.add(player); status.players++;
